@@ -8,19 +8,19 @@ rustflags = [
 # Convenient aliases for common operations
 [alias]
 # Firmware commands
-build-fw = "build -p midibox-fw --target thumbv7em-none-eabi"
-check-fw = "check -p midibox-fw --target thumbv7em-none-eabi"
-run-fw = "run -p midibox-fw --target thumbv7em-none-eabi"
-test-fw = "test -p midibox-fw --target thumbv7em-none-eabi"
+build-fw = "build -p expresso-fw --target thumbv7em-none-eabi"
+check-fw = "check -p expresso-fw --target thumbv7em-none-eabi"
+run-fw = "run -p expresso-fw --target thumbv7em-none-eabi"
+test-fw = "test -p expresso-fw --target thumbv7em-none-eabi"
 
 # Desktop software commands
-build-sw = "build -p midibox-sw"
-check-sw = "check -p midibox-sw"
-run-sw = "run -p midibox-sw"
-test-sw = "test -p midibox-sw"
+build-sw = "build -p expresso-sw"
+check-sw = "check -p expresso-sw"
+run-sw = "run -p expresso-sw"
+test-sw = "test -p expresso-sw"
 
 # Check all code
-check-all = "check -p midibox-sw && cargo check -p midibox-fw --target thumbv7em-none-eabi"
+check-all = "check -p expresso-sw && cargo check -p expresso-fw --target thumbv7em-none-eabi"
 
 [env]
 DEFMT_LOG = "trace"
