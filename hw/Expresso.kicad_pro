@@ -54,47 +54,35 @@
       "diff_pair_dimensions": [],
       "drc_exclusions": [
         [
-          "hole_clearance|128164000|139643000|fc8e58a1-6ca5-416c-beea-217bb4b535f0|040bbf9d-e59d-4acb-a318-0cc3e110adc9",
+          "hole_clearance|128164000|139643000|040bbf9d-e59d-4acb-a318-0cc3e110adc9|2f536d65-f77f-4f62-bbd7-b19112ac2c4a",
           ""
         ],
         [
-          "hole_clearance|128164000|139643000|fc8e58a1-6ca5-416c-beea-217bb4b535f0|abdae9b5-d5d7-43c0-adba-9fa4f26367bd",
+          "hole_clearance|128164000|139643000|abdae9b5-d5d7-43c0-adba-9fa4f26367bd|2f536d65-f77f-4f62-bbd7-b19112ac2c4a",
           ""
         ],
         [
-          "hole_clearance|128364000|139643000|fc8e58a1-6ca5-416c-beea-217bb4b535f0|831a8aff-a122-4284-bdc6-9b82d5858dc1",
+          "hole_clearance|128364000|139643000|831a8aff-a122-4284-bdc6-9b82d5858dc1|2f536d65-f77f-4f62-bbd7-b19112ac2c4a",
           ""
         ],
         [
-          "hole_clearance|128364000|139643000|fc8e58a1-6ca5-416c-beea-217bb4b535f0|f150e472-43b1-4aa1-b75c-42e124aac0d1",
+          "hole_clearance|128364000|139643000|f150e472-43b1-4aa1-b75c-42e124aac0d1|2f536d65-f77f-4f62-bbd7-b19112ac2c4a",
           ""
         ],
         [
-          "hole_clearance|133764000|139643000|033f57d1-183c-4aa3-8f97-7a27ec4acca9|5a889a68-df81-403a-ae33-1b6efcbfcac8",
+          "hole_clearance|133764000|139643000|5a889a68-df81-403a-ae33-1b6efcbfcac8|ed8581a0-d1d0-4829-92a3-ad4b3c4e545d",
           ""
         ],
         [
-          "hole_clearance|133764000|139643000|033f57d1-183c-4aa3-8f97-7a27ec4acca9|9f8e7b4c-5310-4a8d-9816-f6dfa3ecfe0c",
+          "hole_clearance|133764000|139643000|9f8e7b4c-5310-4a8d-9816-f6dfa3ecfe0c|ed8581a0-d1d0-4829-92a3-ad4b3c4e545d",
           ""
         ],
         [
-          "hole_clearance|133964000|139643000|033f57d1-183c-4aa3-8f97-7a27ec4acca9|2e531a46-cb1b-41ad-a343-0e80389d4b24",
+          "hole_clearance|133964000|139643000|2e531a46-cb1b-41ad-a343-0e80389d4b24|ed8581a0-d1d0-4829-92a3-ad4b3c4e545d",
           ""
         ],
         [
-          "hole_clearance|133964000|139643000|033f57d1-183c-4aa3-8f97-7a27ec4acca9|bd0999b7-c2dc-4745-8a02-12870e7eb15a",
-          ""
-        ],
-        [
-          "silk_edge_clearance|126484000|145288000|397f82fb-bb4d-4a07-9ec5-47722f593a39|c0fe95d7-15e8-4084-b39f-d1681584fb4c",
-          ""
-        ],
-        [
-          "silk_edge_clearance|135644000|145288000|397f82fb-bb4d-4a07-9ec5-47722f593a39|d626e45e-515a-4156-95ef-c2329032a2b3",
-          ""
-        ],
-        [
-          "silk_over_copper|192734822|123942090|f6a5d2b5-b289-4cbe-a2a4-6c198caad5e6|00000000-0000-0000-0000-000000000000",
+          "hole_clearance|133964000|139643000|bd0999b7-c2dc-4745-8a02-12870e7eb15a|ed8581a0-d1d0-4829-92a3-ad4b3c4e545d",
           ""
         ],
         [
@@ -591,6 +579,18 @@
           "show": true
         },
         {
+          "group_by": false,
+          "label": "LCSC",
+          "name": "LCSC",
+          "show": true
+        },
+        {
+          "group_by": true,
+          "label": "Footprint",
+          "name": "Footprint",
+          "show": true
+        },
+        {
           "group_by": true,
           "label": "DNP",
           "name": "${DNP}",
@@ -606,12 +606,6 @@
           "group_by": true,
           "label": "Exclude from Board",
           "name": "${EXCLUDE_FROM_BOARD}",
-          "show": true
-        },
-        {
-          "group_by": true,
-          "label": "Footprint",
-          "name": "Footprint",
           "show": true
         },
         {
@@ -643,20 +637,14 @@
           "label": "#",
           "name": "${ITEM_NUMBER}",
           "show": false
-        },
-        {
-          "group_by": false,
-          "label": "LCSC",
-          "name": "LCSC",
-          "show": true
         }
       ],
       "filter_string": "",
       "group_symbols": true,
       "include_excluded_from_bom": true,
       "name": "",
-      "sort_asc": false,
-      "sort_field": "Value"
+      "sort_asc": true,
+      "sort_field": "Reference"
     },
     "connection_grid_size": 50.0,
     "drawing": {
