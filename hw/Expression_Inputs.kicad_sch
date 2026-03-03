@@ -184,7 +184,7 @@
 			)
 		)
 		(instances
-			(project "Midi Expressor"
+			(project "Expresso"
 				(path "/1e7cbae1-0003-4e27-ba62-2dd55b10f4f2/d384fc08-7a14-4f66-a318-27ce132b50b2"
 					(page "8")
 				)
@@ -236,7 +236,7 @@
 			)
 		)
 		(instances
-			(project "Midi Expressor"
+			(project "Expresso"
 				(path "/1e7cbae1-0003-4e27-ba62-2dd55b10f4f2/d384fc08-7a14-4f66-a318-27ce132b50b2"
 					(page "11")
 				)
@@ -288,7 +288,7 @@
 			)
 		)
 		(instances
-			(project "Midi Expressor"
+			(project "Expresso"
 				(path "/1e7cbae1-0003-4e27-ba62-2dd55b10f4f2/d384fc08-7a14-4f66-a318-27ce132b50b2"
 					(page "9")
 				)
@@ -340,7 +340,7 @@
 			)
 		)
 		(instances
-			(project "Midi Expressor"
+			(project "Expresso"
 				(path "/1e7cbae1-0003-4e27-ba62-2dd55b10f4f2/d384fc08-7a14-4f66-a318-27ce132b50b2"
 					(page "10")
 				)
