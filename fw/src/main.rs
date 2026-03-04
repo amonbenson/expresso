@@ -10,9 +10,11 @@ mod usb_midi;
 
 use defmt::info;
 use embassy_executor::Spawner;
+use embassy_stm32::gpio::{Level, Output, Speed};
+use embassy_stm32::rcc::{Hsi48Config, mux};
 use embassy_stm32::{Config, bind_interrupts, peripherals, usart, usb};
 use expression::ExpressionDriver;
-use midi::{MidiEventChannel, MidiSender};
+use midi::MidiEventChannel;
 use {defmt_rtt as _, panic_probe as _};
 
 bind_interrupts!(struct Irqs {
@@ -26,7 +28,21 @@ static TO_DIN:   MidiEventChannel = MidiEventChannel::new();
 
 #[embassy_executor::main]
 async fn main(spawner: Spawner) {
-    let p = embassy_stm32::init(Config::default());
+    // Clock configuration:
+    //   - System clock: HSI 16 MHz (default, unchanged)
+    //   - USB clock:    HSI48 48 MHz, trimmed via CRS from USB SOF packets
+    //
+    // HSI48 is already on in the G4 default Config, but sync_from_usb must be
+    // true so the CRS keeps the oscillator within USB frequency tolerance.
+    let mut config = Config::default();
+    config.rcc.hsi48 = Some(Hsi48Config { sync_from_usb: true });
+    config.rcc.mux.clk48sel = mux::Clk48sel::HSI48;
+
+    let p = embassy_stm32::init(config);
+
+    // PB12 (GPIO_LED1): lights up immediately after boot to confirm the
+    // firmware is alive and clocks are initialised.
+    let _led_boot = Output::new(p.PB12, Level::High, Speed::Low);
 
     info!("Expresso firmware starting");
 
@@ -78,4 +94,13 @@ async fn main(spawner: Spawner) {
         midi_channel: 0,
     });
     spawner.spawn(expression::expression_task(expression, MIDI_BUS.sender())).unwrap();
+
+    // PB13 (GPIO_LED2): lights up once all tasks are spawned and the device
+    // is fully initialised.
+    let _led_init = Output::new(p.PB13, Level::High, Speed::Low);
+
+    info!("All tasks spawned, initialisation complete");
+
+    // Keep main task alive so the LED Output guards are not dropped.
+    core::future::pending::<()>().await
 }
