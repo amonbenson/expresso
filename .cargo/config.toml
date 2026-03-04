@@ -6,6 +6,9 @@ check-fw = ["check", "-p", "expresso-fw", "--target", "thumbv7em-none-eabihf"]
 # Flash via USB DFU (device must be in DFU mode first: hold BOOT0 high + reset)
 flash-fw = ["run", "-p", "xtask", "--", "flash-fw"]
 
+# Open fw/expresso.ioc in STM32CubeMX (reference only, code generation is not used)
+cubemx = ["run", "-p", "xtask", "--", "cubemx"]
+
 # Desktop software commands (default system toolchain)
 build-sw = ["build", "-p", "midibox-sw"]
 check-sw = ["check", "-p", "midibox-sw"]

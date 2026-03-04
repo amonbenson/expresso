@@ -6,12 +6,14 @@ fn main() {
     match task.as_deref() {
         Some("build-fw") => build_fw(),
         Some("flash-fw") => flash_fw(),
+        Some("cubemx") => open_cubemx(),
         _ => {
             eprintln!("Usage: cargo xtask <task>");
             eprintln!();
             eprintln!("Tasks:");
             eprintln!("  build-fw   Build firmware for STM32G431CB");
             eprintln!("  flash-fw   Build + flash firmware via USB DFU");
+            eprintln!("  cubemx     Open fw/expresso.ioc in STM32CubeMX");
             eprintln!();
             eprintln!("DFU mode: hold BOOT0 high and reset the device before flashing.");
             std::process::exit(1);
@@ -56,6 +58,61 @@ fn flash_fw() {
     }
 
     eprintln!("Done! The device will boot the new firmware.");
+}
+
+fn open_cubemx() {
+    let ioc = workspace_root().join("fw/expresso.ioc");
+    let cubemx = find_cubemx();
+
+    eprintln!("Opening {} in STM32CubeMX ...", ioc.display());
+
+    let status = Command::new(&cubemx)
+        .arg(&ioc)
+        .status()
+        .unwrap_or_else(|e| panic!("failed to launch {}: {e}", cubemx.display()));
+
+    if !status.success() {
+        eprintln!("STM32CubeMX exited with an error.");
+        std::process::exit(status.code().unwrap_or(1));
+    }
+}
+
+/// Locate STM32CubeMX, searching PATH then known install locations.
+fn find_cubemx() -> PathBuf {
+    let bin = if cfg!(windows) { "STM32CubeMX.exe" } else { "STM32CubeMX" };
+
+    if which(bin).is_some() {
+        return PathBuf::from(bin);
+    }
+
+    let candidates: &[&str] = if cfg!(windows) {
+        &[
+            r"C:\ST\STM32CubeMX\STM32CubeMX.exe",
+            r"C:\ST\STM32CubeCLT\STM32CubeMX\STM32CubeMX.exe",
+            r"C:\Program Files\STMicroelectronics\STM32Cube\STM32CubeMX\STM32CubeMX.exe",
+        ]
+    } else if cfg!(target_os = "macos") {
+        &[
+            "/Applications/STMicroelectronics/STM32CubeMX.app/Contents/MacOs/STM32CubeMX",
+            "/Applications/STM32CubeMX.app/Contents/MacOs/STM32CubeMX",
+        ]
+    } else {
+        // Linux / WSL
+        &[
+            "/opt/ST/STM32CubeMX/STM32CubeMX",
+            "/usr/local/STM32CubeMX/STM32CubeMX",
+        ]
+    };
+
+    for path in candidates {
+        if Path::new(path).exists() {
+            return PathBuf::from(path);
+        }
+    }
+
+    eprintln!("error: STM32CubeMX not found.");
+    eprintln!("Install STM32CubeMX and make sure it is in PATH.");
+    std::process::exit(1);
 }
 
 /// Locate STM32_Programmer_CLI, searching PATH then known install locations.
