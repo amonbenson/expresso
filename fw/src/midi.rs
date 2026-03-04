@@ -38,3 +38,15 @@ impl MidiEvent {
         Self { source, message }
     }
 }
+
+/// A bidirectional MIDI peripheral (e.g. USB MIDI, DIN MIDI).
+/// Receives events from the router and forwards events to the shared bus.
+pub trait MidiBridge {
+    async fn run(self, from_router: MidiReceiver<'static>, to_bus: MidiSender<'static>);
+}
+
+/// A producer-only MIDI peripheral (e.g. expression pedal inputs).
+/// Only emits events onto the shared bus; never receives from the router.
+pub trait MidiSource {
+    async fn run(self, to_bus: MidiSender<'static>);
+}
