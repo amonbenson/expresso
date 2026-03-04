@@ -54,43 +54,47 @@
       "diff_pair_dimensions": [],
       "drc_exclusions": [
         [
-          "hole_clearance|128164000|139643000|040bbf9d-e59d-4acb-a318-0cc3e110adc9|2f536d65-f77f-4f62-bbd7-b19112ac2c4a",
+          "courtyards_overlap|144317343|128009000|ec6501bf-413c-44f3-9ebb-720ae7e2116a|f7adf307-8bd9-433c-bf54-526e9ff60e3a",
           ""
         ],
         [
-          "hole_clearance|128164000|139643000|abdae9b5-d5d7-43c0-adba-9fa4f26367bd|2f536d65-f77f-4f62-bbd7-b19112ac2c4a",
+          "hole_clearance|128164000|139643000|2f536d65-f77f-4f62-bbd7-b19112ac2c4a|040bbf9d-e59d-4acb-a318-0cc3e110adc9",
           ""
         ],
         [
-          "hole_clearance|128364000|139643000|831a8aff-a122-4284-bdc6-9b82d5858dc1|2f536d65-f77f-4f62-bbd7-b19112ac2c4a",
+          "hole_clearance|128164000|139643000|2f536d65-f77f-4f62-bbd7-b19112ac2c4a|abdae9b5-d5d7-43c0-adba-9fa4f26367bd",
           ""
         ],
         [
-          "hole_clearance|128364000|139643000|f150e472-43b1-4aa1-b75c-42e124aac0d1|2f536d65-f77f-4f62-bbd7-b19112ac2c4a",
+          "hole_clearance|128364000|139643000|2f536d65-f77f-4f62-bbd7-b19112ac2c4a|831a8aff-a122-4284-bdc6-9b82d5858dc1",
           ""
         ],
         [
-          "hole_clearance|133764000|139643000|5a889a68-df81-403a-ae33-1b6efcbfcac8|ed8581a0-d1d0-4829-92a3-ad4b3c4e545d",
+          "hole_clearance|128364000|139643000|2f536d65-f77f-4f62-bbd7-b19112ac2c4a|f150e472-43b1-4aa1-b75c-42e124aac0d1",
           ""
         ],
         [
-          "hole_clearance|133764000|139643000|9f8e7b4c-5310-4a8d-9816-f6dfa3ecfe0c|ed8581a0-d1d0-4829-92a3-ad4b3c4e545d",
+          "hole_clearance|133764000|139643000|ed8581a0-d1d0-4829-92a3-ad4b3c4e545d|5a889a68-df81-403a-ae33-1b6efcbfcac8",
           ""
         ],
         [
-          "hole_clearance|133964000|139643000|2e531a46-cb1b-41ad-a343-0e80389d4b24|ed8581a0-d1d0-4829-92a3-ad4b3c4e545d",
+          "hole_clearance|133764000|139643000|ed8581a0-d1d0-4829-92a3-ad4b3c4e545d|9f8e7b4c-5310-4a8d-9816-f6dfa3ecfe0c",
           ""
         ],
         [
-          "hole_clearance|133964000|139643000|bd0999b7-c2dc-4745-8a02-12870e7eb15a|ed8581a0-d1d0-4829-92a3-ad4b3c4e545d",
+          "hole_clearance|133964000|139643000|ed8581a0-d1d0-4829-92a3-ad4b3c4e545d|2e531a46-cb1b-41ad-a343-0e80389d4b24",
           ""
         ],
         [
-          "starved_thermal|134264000|139023000|c152b0fb-369c-4c20-a515-e33a9635246d|2e531a46-cb1b-41ad-a343-0e80389d4b24|F.Cu",
+          "hole_clearance|133964000|139643000|ed8581a0-d1d0-4829-92a3-ad4b3c4e545d|bd0999b7-c2dc-4745-8a02-12870e7eb15a",
           ""
         ],
         [
-          "starved_thermal|134264000|139023000|c152b0fb-369c-4c20-a515-e33a9635246d|bd0999b7-c2dc-4745-8a02-12870e7eb15a|F.Cu",
+          "silk_overlap|139105683|115775423|05e78785-4e5a-429d-ba36-33cc2b19ceaa|2e082659-aa7c-451b-9ec0-d5589b4deeb2",
+          ""
+        ],
+        [
+          "silk_overlap|139261314|107802249|d68a331a-2ed6-404e-afd3-e0006961fe41|f095b892-ff99-4213-9c64-3b9c17185248",
           ""
         ]
       ],
@@ -123,7 +127,7 @@
         "items_not_allowed": "error",
         "length_out_of_range": "error",
         "lib_footprint_issues": "warning",
-        "lib_footprint_mismatch": "warning",
+        "lib_footprint_mismatch": "ignore",
         "malformed_courtyard": "error",
         "microvia_drill_out_of_range": "error",
         "mirrored_text_on_front_layer": "warning",
@@ -135,7 +139,7 @@
         "padstack": "warning",
         "pth_inside_courtyard": "ignore",
         "shorting_items": "error",
-        "silk_edge_clearance": "warning",
+        "silk_edge_clearance": "ignore",
         "silk_over_copper": "warning",
         "silk_overlap": "warning",
         "skew_out_of_range": "error",
@@ -147,13 +151,13 @@
         "through_hole_pad_without_hole": "error",
         "too_many_vias": "error",
         "track_angle": "error",
-        "track_dangling": "warning",
+        "track_dangling": "error",
         "track_segment_length": "error",
         "track_width": "error",
         "tracks_crossing": "error",
         "unconnected_items": "error",
         "unresolved_variable": "error",
-        "via_dangling": "warning",
+        "via_dangling": "error",
         "zones_intersect": "error"
       },
       "rules": {
