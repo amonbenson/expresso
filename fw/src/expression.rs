@@ -1,6 +1,7 @@
 use defmt::info;
+use embassy_stm32::adc::{Adc, SampleTime};
 use embassy_stm32::{peripherals, Peri};
-use embassy_time::Timer;
+use embassy_time::{Duration, Timer};
 
 use crate::config::EXPRESSION_POLL_HZ;
 use crate::midi::MidiSender;
@@ -48,5 +49,37 @@ pub async fn task(
 
     loop {
         Timer::after_millis(1000 / EXPRESSION_POLL_HZ).await;
+    }
+}
+
+pub struct ExpressionDevice<ADC, PIN_VR, PIN_VS>
+where
+    ADC: embassy_stm32::adc::Instance,
+    PIN_VR: embassy_stm32::adc::AdcChannel<ADC>,
+    PIN_VS: embassy_stm32::adc::AdcChannel<ADC>,
+{
+    adc: Adc<'static, ADC>,
+    pin_vr: PIN_VR,
+    pin_vs: PIN_VS,
+}
+
+impl<ADC, PIN_VR, PIN_VS> ExpressionDevice<ADC, PIN_VR, PIN_VS>
+where
+    ADC: embassy_stm32::adc::Instance,
+    PIN_VR: embassy_stm32::adc::AdcChannel<ADC>,
+    PIN_VS: embassy_stm32::adc::AdcChannel<ADC>,
+{
+    pub fn new(adc: Adc<'static, ADC>, pin_vr: PIN_VR, pin_vs: PIN_VS) -> Self {
+        Self { adc, pin_vr, pin_vs }
+    }
+
+    pub async fn task(expression_device: &mut ExpressionDevice<ADC, PIN_VR, PIN_VS>, to_bus: MidiSender<'static>) {
+        let interval = Duration::from_hz(EXPRESSION_POLL_HZ);
+
+        loop {
+            let xr = expression_device.adc.blocking_read(&mut expression_device.pin_vr, SampleTime::CYCLES2_5);
+            let xs = expression_device.adc.blocking_read(&mut expression_device.pin_vs, SampleTime::CYCLES2_5);
+            Timer::after(interval).await;
+        }
     }
 }

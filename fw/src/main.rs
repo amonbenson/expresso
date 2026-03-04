@@ -10,8 +10,8 @@ mod usb_midi;
 
 use defmt::info;
 use embassy_executor::Spawner;
-use embassy_stm32::{bind_interrupts, peripherals, usart, usb, Config};
-use midi::MidiChan;
+use embassy_stm32::{Config, adc::{Adc, AdcConfig}, bind_interrupts, peripherals, usart, usb};
+use midi::MidiEventChannel;
 use {defmt_rtt as _, panic_probe as _};
 
 bind_interrupts!(struct Irqs {
@@ -19,9 +19,9 @@ bind_interrupts!(struct Irqs {
     USART1 => usart::InterruptHandler<peripherals::USART1>;
 });
 
-static MIDI_BUS: MidiChan = MidiChan::new();
-static TO_USB: MidiChan = MidiChan::new();
-static TO_DIN: MidiChan = MidiChan::new();
+static MIDI_BUS: MidiEventChannel = MidiEventChannel::new();
+static TO_USB: MidiEventChannel = MidiEventChannel::new();
+static TO_DIN: MidiEventChannel = MidiEventChannel::new();
 
 #[embassy_executor::main]
 async fn main(spawner: Spawner) {
@@ -62,16 +62,19 @@ async fn main(spawner: Spawner) {
         ))
         .unwrap();
 
-    // Expression pedals: producer only: posts incoming messages to the main MIDI_BUS
-    spawner
-        .spawn(expression::task(
-            p.ADC1,
-            p.PA0, p.PA1,
-            p.PA2, p.PA3,
-            p.ADC2,
-            p.PA4, p.PA5,
-            p.PA6, p.PA7,
-            MIDI_BUS.sender(),
-        ))
-        .unwrap();
+    // // Expression pedals: producer only: posts incoming messages to the main MIDI_BUS
+    // spawner
+    //     .spawn(expression::task(
+    //         p.ADC1,
+    //         p.PA0, p.PA1,
+    //         p.PA2, p.PA3,
+    //         p.ADC2,
+    //         p.PA4, p.PA5,
+    //         p.PA6, p.PA7,
+    //         MIDI_BUS.sender(),
+    //     ))
+    //     .unwrap();
+
+    let mut adc1 = Adc::new(p.ADC1, AdcConfig::default());
+    let mut expression_device = expression::ExpressionDevice::new(adc1, p.PA0, p.PA1);
 }

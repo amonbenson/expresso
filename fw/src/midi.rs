@@ -5,7 +5,7 @@ use embassy_sync::{
 
 pub const CHANNEL_CAP: usize = 16;
 
-pub type MidiChan = Channel<CriticalSectionRawMutex, MidiEvent, CHANNEL_CAP>;
+pub type MidiEventChannel = Channel<CriticalSectionRawMutex, MidiEvent, CHANNEL_CAP>;
 pub type MidiSender<'a> = Sender<'a, CriticalSectionRawMutex, MidiEvent, CHANNEL_CAP>;
 pub type MidiReceiver<'a> = Receiver<'a, CriticalSectionRawMutex, MidiEvent, CHANNEL_CAP>;
 
@@ -30,12 +30,11 @@ pub enum MidiPeripheral {
 #[derive(Clone, Copy, Debug, defmt::Format)]
 pub struct MidiEvent {
     pub source: MidiPeripheral,
-    pub target: MidiPeripheral,
     pub message: MidiMessage,
 }
 
 impl MidiEvent {
-    pub fn new(source: MidiPeripheral, target: MidiPeripheral, message: MidiMessage) -> Self {
-        Self { source, target, message }
+    pub fn new(source: MidiPeripheral, message: MidiMessage) -> Self {
+        Self { source, message }
     }
 }
