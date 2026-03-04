@@ -1,0 +1,24 @@
+{
+    // Use the rust-analyzer binary from the active toolchain (via rustup component
+    // add rust-analyzer). This ensures the proc-macro server ABI always matches
+    // the rustc version declared in rust-toolchain.toml.
+    "rust-analyzer.server.path": "rust-analyzer",
+
+    // Explicitly configure each crate with its correct target so rust-analyzer
+    // doesn't try to analyse the firmware package with the host target.
+    "rust-analyzer.linkedProjects": [
+        // Desktop app and shared crate — compiled for the host target.
+        "sw/Cargo.toml",
+        "common/Cargo.toml",
+        "xtask/Cargo.toml",
+        // Firmware — compiled for the embedded target.
+        // rust-analyzer inherits the default target from fw/.cargo/config.toml.
+        "fw/Cargo.toml"
+    ],
+
+    // Needed for embassy's build scripts (memory layout, etc.).
+    "rust-analyzer.cargo.buildScripts.enable": true,
+
+    // Expand proc-macros (embassy_executor::main, etc.).
+    "rust-analyzer.procMacro.enable": true
+}

@@ -46,7 +46,7 @@ fn flash_fw() {
     let status = Command::new(&programmer)
         .args(["-c", "port=USB1", "-w"])
         .arg(&elf)
-        .args(["-v", "-rst"])
+        .arg("-v")
         .status()
         .unwrap_or_else(|e| panic!("failed to run {}: {e}", programmer.display()));
 
