@@ -1,26 +1,12 @@
-# Configuration for embedded target
-[target.thumbv7em-none-eabi]
-runner = "probe-rs run --chip STM32G431CB"
-rustflags = [
-  "-C", "link-arg=-Tlink.x",
-]
-
-# Convenient aliases for common operations
 [alias]
-# Firmware commands
-build-fw = "build -p midibox-fw --target thumbv7em-none-eabi"
-check-fw = "check -p midibox-fw --target thumbv7em-none-eabi"
-run-fw = "run -p midibox-fw --target thumbv7em-none-eabi"
-test-fw = "test -p midibox-fw --target thumbv7em-none-eabi"
+# Firmware commands (STM32 target)
+build-fw = ["run", "-p", "xtask", "--", "build-fw"]
+check-fw = ["check", "-p", "expresso-fw", "--target", "thumbv7em-none-eabihf"]
 
-# Desktop software commands
-build-sw = "build -p midibox-sw"
-check-sw = "check -p midibox-sw"
-run-sw = "run -p midibox-sw"
-test-sw = "test -p midibox-sw"
+# Flash via USB DFU (device must be in DFU mode first: hold BOOT0 high + reset)
+flash-fw = ["run", "-p", "xtask", "--", "flash-fw"]
 
-# Check all code
-check-all = "check -p midibox-sw && cargo check -p midibox-fw --target thumbv7em-none-eabi"
-
-[env]
-DEFMT_LOG = "trace"
+# Desktop software commands (default system toolchain)
+build-sw = ["build", "-p", "midibox-sw"]
+check-sw = ["check", "-p", "midibox-sw"]
+run-sw   = ["run",   "-p", "midibox-sw"]

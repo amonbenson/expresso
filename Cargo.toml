@@ -4,6 +4,16 @@ members = [
     "sw",
     "fw",
     "common",
+    "xtask",
 ]
 
 default-members = ["sw"]
+
+# Firmware needs size optimization even in dev to fit in flash
+[profile.dev.package.expresso-fw]
+opt-level = "z"
+
+[profile.release]
+opt-level = "z"
+debug = 2
+lto = true

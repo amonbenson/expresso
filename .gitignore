@@ -1,6 +1,9 @@
 /target
 /tmp
 
+# AI stuff
+.claude/
+
 # MacOS stuff
 .DS_Store
 __MACOSX/
