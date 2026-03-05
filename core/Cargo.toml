@@ -3,4 +3,8 @@ name = "core"
 version = "0.1.0"
 edition = "2024"
 
+[features]
+embassy = ["embassy-sync"]
+
 [dependencies]
+embassy-sync = { version = "0.7.2", optional = true }

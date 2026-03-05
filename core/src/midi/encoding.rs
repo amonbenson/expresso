@@ -550,11 +550,10 @@ mod tests {
 
         #[test]
         fn sysex_single_packet() {
-            // 3 data bytes + F0/F7 = fits in one end packet
-            let data = [0xF0, 0x41, 0x10, 0xF7];
+            // F0 + 1 data byte + F7 = 3 bytes, fits in one CIN 0x07 end packet
+            let data = [0xF0, 0x41, 0xF7];
             let sink = encode(&MidiMessage::Sysex(&data));
             assert_eq!(sink.len(), 1);
-            // 4 bytes: F0 + 2 data + F7 -> CIN 0x07 (sysex end, 3 bytes)
             assert_eq!(sink.get(0)[0] & 0x0F, 0x07);
         }
 
@@ -574,9 +573,8 @@ mod tests {
 
         #[test]
         fn sysex_end_1_byte() {
-            // F0 + F7 = 2 bytes -> CIN 0x06 (end, 2 bytes: F0 and F7)
-            // Actually F0 alone in packet 1 (CIN 0x04), then F7 alone (CIN 0x05)
-            let data = [0xF0, 0xF7];
+            // F0 + 2 data bytes + F7 = 4 bytes; first chunk is CIN 0x04, last chunk is F7 alone (CIN 0x05)
+            let data = [0xF0, 0x41, 0x10, 0xF7];
             let sink = encode(&MidiMessage::Sysex(&data));
             // Last packet CIN should be 0x05 (1 byte end)
             let last = sink.get(sink.len() - 1);
@@ -953,7 +951,6 @@ mod tests {
             encoder.emit(&msg, &mut sink).unwrap();
 
             let mut decoder = UsbMidiDecoder::<64>::new();
-            let mut result_data: Option<&[u8]> = None;
 
             // We need the decoder to outlive the loop so we can inspect sysex data
             // so we drive it manually here
@@ -1074,13 +1071,15 @@ mod tests {
             decoder: &'d mut DinMidiDecoder<N>,
             bytes: &[u8],
         ) -> Option<MidiMessage<'d>> {
-            let mut result = None;
-            for &b in bytes {
-                if let Some(msg) = decoder.feed(b) {
-                    result = Some(msg);
+            match bytes.split_last() {
+                None => None,
+                Some((last, rest)) => {
+                    for &b in rest {
+                        decoder.feed(b);
+                    }
+                    decoder.feed(*last)
                 }
             }
-            result
         }
 
         #[test]
@@ -1293,19 +1292,25 @@ mod tests {
         #[test]
         fn multiple_messages_sequential() {
             let mut decoder = DinMidiDecoder::<0>::new();
-            let msg1 = feed_all(&mut decoder, &[0x90, 60, 100]).unwrap();
-            let msg2 = feed_all(&mut decoder, &[0x80, 60, 0]).unwrap();
-            let msg3 = feed_all(&mut decoder, &[0xB0, 7, 64]).unwrap();
-            assert!(matches!(msg1, MidiMessage::NoteOn { note: 60, .. }));
-            assert!(matches!(msg2, MidiMessage::NoteOff { note: 60, .. }));
-            assert!(matches!(
-                msg3,
-                MidiMessage::ControlChange {
-                    control: 7,
-                    value: 64,
-                    ..
-                }
-            ));
+            {
+                let msg = feed_all(&mut decoder, &[0x90, 60, 100]).unwrap();
+                assert!(matches!(msg, MidiMessage::NoteOn { note: 60, .. }));
+            }
+            {
+                let msg = feed_all(&mut decoder, &[0x80, 60, 0]).unwrap();
+                assert!(matches!(msg, MidiMessage::NoteOff { note: 60, .. }));
+            }
+            {
+                let msg = feed_all(&mut decoder, &[0xB0, 7, 64]).unwrap();
+                assert!(matches!(
+                    msg,
+                    MidiMessage::ControlChange {
+                        control: 7,
+                        value: 64,
+                        ..
+                    }
+                ));
+            }
         }
     }
 

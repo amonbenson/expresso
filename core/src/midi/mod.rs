@@ -13,4 +13,4 @@ pub mod types;
 pub use types::MidiMessage;
 
 pub mod encoding;
-pub use encoding::MidiEncoding;
+pub use encoding::MidiEncoder;
