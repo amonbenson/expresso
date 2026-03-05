@@ -1,14 +1,14 @@
-use iced::{Center, Element, Fill};
 use iced::widget::{Column, column, row};
+use iced::{Center, Element, Fill};
 use num_traits::{Bounded, Num, NumAssignOps};
 use std::fmt::Display;
-use std::ops::{RangeInclusive};
+use std::ops::RangeInclusive;
 use std::str::FromStr;
 use strum::VariantArray;
 
 use crate::device_config::{ChannelConfig, InputMode};
 use crate::theme::config::SPACING;
-use crate::theme::widget::{pick_list, text, primary_text, text_input};
+use crate::theme::widget::{pick_list, primary_text, text, text_input};
 
 pub fn labeled_knob<'a, Message: Clone + 'a, T, F>(
     label: &'a str,
@@ -21,8 +21,7 @@ where
     F: Fn(T) -> Message + Copy + 'static,
 {
     column![
-        text(label)
-            .align_x(Center),
+        text(label).align_x(Center),
         text_input("", &value.to_string())
             .on_input(move |s| {
                 let value: T = s.parse().unwrap_or(T::zero()); // parse string value
@@ -31,28 +30,26 @@ where
             })
             .width(64)
     ]
-        .spacing(SPACING / 2.)
-        .align_x(Center)
-        .width(Fill)
+    .spacing(SPACING / 2.)
+    .align_x(Center)
+    .width(Fill)
 }
 
 pub fn channel_strip<'a, Message: Clone + 'a>(
     channel_index: usize,
     channel: &'a ChannelConfig,
     on_change: impl Fn(ChannelConfig) -> Message + Copy + 'static,
-) -> Element<'a, Message>
-{
+) -> Element<'a, Message> {
     let channel_clone = channel.clone();
 
     column![
-        primary_text((channel_index + 1).to_string())
-            .size(36),
+        primary_text((channel_index + 1).to_string()).size(36),
         pick_list(
             InputMode::VARIANTS,
             Some(&channel.input.mode),
             move |value| on_change(channel_clone.with_input_mode(value)),
         )
-            .width(Fill),
+        .width(Fill),
         // row![
         //     button("C")
         //         .on_press_with(move || on_change(channel_clone.with_input_mode(InputMode::Continuous)))
@@ -83,9 +80,9 @@ pub fn channel_strip<'a, Message: Clone + 'a>(
                         move |value| on_change(channel_clone.with_maximum_input(value)),
                     ),
                 ]
-                    .spacing(SPACING)
-                    .align_y(Center)
-                    .width(Fill),
+                .spacing(SPACING)
+                .align_y(Center)
+                .width(Fill),
                 row![
                     labeled_knob(
                         "Minimum\nOutput",
@@ -100,9 +97,9 @@ pub fn channel_strip<'a, Message: Clone + 'a>(
                         move |value| on_change(channel_clone.with_maximum_output(value)),
                     ),
                 ]
-                    .spacing(SPACING)
-                    .align_y(Center)
-                    .width(Fill),
+                .spacing(SPACING)
+                .align_y(Center)
+                .width(Fill),
                 labeled_knob(
                     "Drive",
                     &channel.input.continuous.drive,
@@ -125,28 +122,25 @@ pub fn channel_strip<'a, Message: Clone + 'a>(
                         move |value| on_change(channel_clone.with_pressed_value(value)),
                     ),
                 ]
-                    .spacing(SPACING)
-                    .align_y(Center)
-                    .width(Fill)
+                .spacing(SPACING)
+                .align_y(Center)
+                .width(Fill)
             ],
         }
-            .spacing(SPACING)
-            .align_x(Center)
-            .width(Fill)
-            .height(Fill),
-        labeled_knob(
-            "CC",
-            &channel.cc,
-            0..=127,
-            move |value| on_change(channel_clone.with_cc(value)),
-        ),
+        .spacing(SPACING)
+        .align_x(Center)
+        .width(Fill)
+        .height(Fill),
+        labeled_knob("CC", &channel.cc, 0..=127, move |value| on_change(
+            channel_clone.with_cc(value)
+        ),),
         text_input("Label", channel.label_str())
             .on_input(move |label_str| on_change(channel_clone.with_label_str(&label_str)))
             .width(Fill),
     ]
-        .spacing(SPACING)
-        .align_x(Center)
-        .width(200)
-        .height(Fill)
-        .into()
+    .spacing(SPACING)
+    .align_x(Center)
+    .width(200)
+    .height(Fill)
+    .into()
 }

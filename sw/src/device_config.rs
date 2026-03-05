@@ -13,8 +13,6 @@ impl Default for SwitchConfig {
     }
 }
 
-
-
 #[derive(Debug, Clone, Copy)]
 pub struct ContinuousConfig {
     pub minimum_input: u8,
@@ -36,15 +34,14 @@ impl Default for ContinuousConfig {
     }
 }
 
-
-
 #[derive(Default, Debug, Clone, Copy, PartialEq, strum::Display, strum::VariantArray)]
 pub enum InputMode {
-    #[default] Continuous,
+    #[default]
+    Continuous,
     Switch,
-    #[strum(to_string="Momentary as Toggle")]
+    #[strum(to_string = "Momentary as Toggle")]
     MomentaryAsToggle,
-    #[strum(to_string="Toggle as Momentary")]
+    #[strum(to_string = "Toggle as Momentary")]
     ToggleAsMomentary,
 }
 
@@ -54,8 +51,6 @@ pub struct InputConfig {
     pub switch: SwitchConfig,
     pub continuous: ContinuousConfig,
 }
-
-
 
 #[derive(Default, Debug, Clone, Copy)]
 pub struct ChannelConfig {
@@ -122,21 +117,21 @@ impl ChannelConfig {
     }
 
     pub fn with_label_str(self, label_str: &str) -> Self {
-        self.with_label(std::array::from_fn(|i| label_str
-            .as_bytes()
-            .get(i)
-            .copied()
-            .unwrap_or(0)))
+        self.with_label(std::array::from_fn(|i| {
+            label_str.as_bytes().get(i).copied().unwrap_or(0)
+        }))
     }
 
     pub fn label_str(&self) -> &str {
         // Find the first null byte or use the full length
-        let end = self.label.iter().position(|&b| b == 0).unwrap_or(Self::LABEL_SIZE);
+        let end = self
+            .label
+            .iter()
+            .position(|&b| b == 0)
+            .unwrap_or(Self::LABEL_SIZE);
         std::str::from_utf8(&self.label[..end]).unwrap_or("")
     }
 }
-
-
 
 #[derive(Debug)]
 pub struct DeviceConfig<const C: usize> {

@@ -1,14 +1,14 @@
-use iced::{Center, Element, Fill};
 use iced::widget::{column, row};
+use iced::{Center, Element, Fill};
 
 use crate::device_config::{ChannelConfig, DeviceConfig};
 use crate::theme::config::{PADDING, SPACING};
-use crate::ui::channel_strip;
 use crate::theme::theme;
+use crate::ui::channel_strip;
 
+mod device_config;
 mod theme;
 mod ui;
-mod device_config;
 
 #[derive(Debug, Clone)]
 enum Message {
@@ -29,32 +29,30 @@ impl App {
         match message {
             Message::ChannelConfigChanged(channel, config) => {
                 self.device_config.channels[channel] = config;
-            },
+            }
         }
     }
 
     fn view(&self) -> Element<'_, Message> {
-        row(self.device_config.channels
+        row(self
+            .device_config
+            .channels
             .iter()
             .enumerate()
             .map(|(c, channel)| {
-                column![
-                    channel_strip(
-                        c,
-                        channel,
-                        move |config| Message::ChannelConfigChanged(c, config),
-                    )
-                ]
-                    .align_x(Center)
-                    .width(Fill)
-                    .height(Fill)
-                    .into()
-        }))
-            .padding(PADDING)
-            .spacing(SPACING)
-            .width(Fill)
-            .height(Fill)
-            .into()
+                column![channel_strip(c, channel, move |config| {
+                    Message::ChannelConfigChanged(c, config)
+                },)]
+                .align_x(Center)
+                .width(Fill)
+                .height(Fill)
+                .into()
+            }))
+        .padding(PADDING)
+        .spacing(SPACING)
+        .width(Fill)
+        .height(Fill)
+        .into()
     }
 }
 

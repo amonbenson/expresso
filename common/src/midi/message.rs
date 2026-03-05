@@ -45,14 +45,14 @@ impl MidiMessage {
     //     let _cin = packet[0] & 0x0f;
 
     //     match cin {
-    //         0x08 => 
+    //         0x08 =>
     //     }
     // }
 
     pub async fn receive_din<ReceiveFn, ReceiveFuture>(receive: ReceiveFn) -> Option<MidiMessage>
     where
         ReceiveFn: Fn() -> ReceiveFuture,
-        ReceiveFuture: Future<Output=u8>,
+        ReceiveFuture: Future<Output = u8>,
     {
         // receive the command and channel byte
         let status = receive().await;
@@ -67,12 +67,18 @@ impl MidiMessage {
             0xB0 => MidiMessage::ControlChange(channel, receive().await, receive().await).into(),
             0xC0 => MidiMessage::ProgramChange(channel, receive().await).into(),
             0xD0 => MidiMessage::ChannelPressure(channel, receive().await).into(),
-            0xE0 => MidiMessage::PitchBend(channel, (receive().await as u16) | (receive().await as u16) << 7).into(),
-            _ => None
+            0xE0 => MidiMessage::PitchBend(
+                channel,
+                (receive().await as u16) | (receive().await as u16) << 7,
+            )
+            .into(),
+            _ => None,
         }
     }
 
-    pub async fn receive_din_from_channel<'ch, M, const N: usize>(receiver: Receiver<'ch, M, u8, N>) -> Option<Self>
+    pub async fn receive_din_from_channel<'ch, M, const N: usize>(
+        receiver: Receiver<'ch, M, u8, N>,
+    ) -> Option<Self>
     where
         M: RawMutex,
     {
@@ -82,7 +88,7 @@ impl MidiMessage {
     pub async fn receive_usb<ReceiveFn, ReceiveFuture>(receive: ReceiveFn) -> Option<MidiMessage>
     where
         ReceiveFn: Fn() -> ReceiveFuture,
-        ReceiveFuture: Future<Output=u8>,
+        ReceiveFuture: Future<Output = u8>,
     {
         // Documentation: https://www.usb.org/sites/default/files/midi10.pdf
         // Ignore cable number for now. We will also ignore the code index number for short messages, as the
@@ -94,7 +100,9 @@ impl MidiMessage {
         }
     }
 
-    pub async fn receive_usb_from_channel<'ch, M, const N: usize>(receiver: Receiver<'ch, M, u8, N>) -> Option<Self>
+    pub async fn receive_usb_from_channel<'ch, M, const N: usize>(
+        receiver: Receiver<'ch, M, u8, N>,
+    ) -> Option<Self>
     where
         M: RawMutex,
     {
@@ -104,20 +112,42 @@ impl MidiMessage {
     pub async fn send_din<SendFn, SendFuture>(self, send: SendFn)
     where
         SendFn: Fn(u8) -> SendFuture,
-        SendFuture: Future<Output=()>,
+        SendFuture: Future<Output = ()>,
     {
         match self {
-            MidiMessage::NoteOff(channel, data1, data2) => { send(0x80 | channel).await; send(data1).await; send(data2).await },
-            MidiMessage::NoteOn(channel, data1, data2) => { send(0x90 | channel).await; send(data1).await; send(data2).await },
-            MidiMessage::PolyKeyPressure(channel, data1, data2) => { send(0xA0 | channel).await; send(data1).await; send(data2).await },
-            MidiMessage::ControlChange(channel, data1, data2) => { send(0xB0 | channel).await; send(data1).await; send(data2).await },
-            MidiMessage::ProgramChange(channel, data1) => { send(0xC0 | channel).await; send(data1).await },
-            MidiMessage::ChannelPressure(channel, data1) => { send(0xD0 | channel).await; send(data1).await },
+            MidiMessage::NoteOff(channel, data1, data2) => {
+                send(0x80 | channel).await;
+                send(data1).await;
+                send(data2).await
+            }
+            MidiMessage::NoteOn(channel, data1, data2) => {
+                send(0x90 | channel).await;
+                send(data1).await;
+                send(data2).await
+            }
+            MidiMessage::PolyKeyPressure(channel, data1, data2) => {
+                send(0xA0 | channel).await;
+                send(data1).await;
+                send(data2).await
+            }
+            MidiMessage::ControlChange(channel, data1, data2) => {
+                send(0xB0 | channel).await;
+                send(data1).await;
+                send(data2).await
+            }
+            MidiMessage::ProgramChange(channel, data1) => {
+                send(0xC0 | channel).await;
+                send(data1).await
+            }
+            MidiMessage::ChannelPressure(channel, data1) => {
+                send(0xD0 | channel).await;
+                send(data1).await
+            }
             MidiMessage::PitchBend(channel, data12) => {
                 send(0xE0 | channel).await;
                 send((data12 & 0x7f) as u8).await;
                 send(((data12 >> 7) & 0x7f) as u8).await;
-            },
+            }
         }
     }
 }

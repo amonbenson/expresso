@@ -1,9 +1,9 @@
+mod knob;
+mod pick_list;
 mod text;
 mod text_input;
-mod pick_list;
-mod knob;
 
+pub use knob::*;
+pub use pick_list::*;
 pub use text::*;
 pub use text_input::*;
-pub use pick_list::*;
-pub use knob::*;

@@ -23,7 +23,14 @@ fn main() {
 
 fn build_fw() {
     let status = cargo()
-        .args(["build", "-p", "expresso-fw", "--target", "thumbv7em-none-eabihf", "--release"])
+        .args([
+            "build",
+            "-p",
+            "expresso-fw",
+            "--target",
+            "thumbv7em-none-eabihf",
+            "--release",
+        ])
         .status()
         .expect("failed to run cargo");
     if !status.success() {
@@ -79,7 +86,11 @@ fn open_cubemx() {
 
 /// Locate STM32CubeMX, searching PATH then known install locations.
 fn find_cubemx() -> PathBuf {
-    let bin = if cfg!(windows) { "STM32CubeMX.exe" } else { "STM32CubeMX" };
+    let bin = if cfg!(windows) {
+        "STM32CubeMX.exe"
+    } else {
+        "STM32CubeMX"
+    };
 
     if which(bin).is_some() {
         return PathBuf::from(bin);
@@ -171,7 +182,10 @@ fn which(bin: &str) -> Option<PathBuf> {
 fn workspace_root() -> PathBuf {
     // CARGO_MANIFEST_DIR is set by cargo and points to xtask/
     let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    manifest.parent().expect("xtask must be inside workspace").to_owned()
+    manifest
+        .parent()
+        .expect("xtask must be inside workspace")
+        .to_owned()
 }
 
 fn cargo() -> Command {

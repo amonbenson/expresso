@@ -1,5 +1,5 @@
-use iced::{Color, Element, Length, Size, border};
 use iced::advanced::{Widget, layout, renderer};
+use iced::{Color, Element, Length, Size, border};
 
 pub struct Knob {
     size: f32,
@@ -7,9 +7,7 @@ pub struct Knob {
 
 impl Knob {
     pub fn new(size: f32) -> Self {
-        Self {
-            size,
-        }
+        Self { size }
     }
 }
 
@@ -67,8 +65,6 @@ where
     }
 }
 
-
-
 // Alternative Canvas Implementation (not working though)
 // struct KnobProgram;
 
@@ -91,4 +87,3 @@ where
 //         vec![frame.into_geometry()]
 //     }
 // }
-

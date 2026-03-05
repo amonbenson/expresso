@@ -1,7 +1,7 @@
-use std::borrow::Borrow;
+use iced::border::rounded;
 use iced::theme::Theme;
 use iced::widget::pick_list::{PickList, Style};
-use iced::border::rounded;
+use std::borrow::Borrow;
 
 use crate::theme::config::RADIUS;
 
@@ -17,12 +17,11 @@ where
     Message: Clone,
     Renderer: iced::advanced::text::Renderer,
 {
-    PickList::new(options, selected, on_selected)
-        .style(|theme: &Theme, _status| Style {
-            text_color: theme.extended_palette().primary.base.text,
-            background: theme.extended_palette().primary.base.color.into(),
-            placeholder_color: theme.extended_palette().primary.base.text.scale_alpha(0.5),
-            handle_color: theme.extended_palette().primary.base.text,
-            border: rounded(RADIUS),
-        })
+    PickList::new(options, selected, on_selected).style(|theme: &Theme, _status| Style {
+        text_color: theme.extended_palette().primary.base.text,
+        background: theme.extended_palette().primary.base.color.into(),
+        placeholder_color: theme.extended_palette().primary.base.text.scale_alpha(0.5),
+        handle_color: theme.extended_palette().primary.base.text,
+        border: rounded(RADIUS),
+    })
 }
