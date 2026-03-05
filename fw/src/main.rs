@@ -8,30 +8,40 @@ mod midi;
 mod router;
 mod usb_midi;
 
-use defmt::info;
 use embassy_executor::Spawner;
 use embassy_stm32::gpio::{Level, Output, Speed};
 use embassy_stm32::rcc::{Hse, HseMode};
 use embassy_stm32::time::Hertz;
+use embassy_stm32::usart::Uart;
 use embassy_stm32::{Config, bind_interrupts, peripherals, usart, usb};
-use midi::MidiEventChannel;
+use midi::MidiMessageChannel;
 use {defmt_rtt as _, panic_probe as _};
 
 bind_interrupts!(struct Irqs {
-    USB_LP  => usb::InterruptHandler<peripherals::USB>;
-    USART1  => usart::InterruptHandler<peripherals::USART1>;
+    USB_LP => usb::InterruptHandler<peripherals::USB>;
+    USART1 => usart::InterruptHandler<peripherals::USART1>;
 });
 
-static MIDI_BUS: MidiEventChannel = MidiEventChannel::new();
-static TO_USB:   MidiEventChannel = MidiEventChannel::new();
-static TO_DIN:   MidiEventChannel = MidiEventChannel::new();
+// Architecture:
+// ┌────────────┐     ┌──────────┐     ┌────────────┐
+// │  USB-MIDI  ├────►│          │────►│  USB-MIDI  │
+// └────────────┘     │          │     └────────────┘
+// ┌────────────┐     │          │     ┌────────────┐
+// │  DIN-MIDI  ├────►│  Router  │────►│  DIN-MIDI  │
+// └────────────┘     │          │     └────────────┘
+// ┌────────────┐     │          │
+// │ Expression ├────►│          │
+// └────────────┘     └──────────┘
+
+static USB_TO_ROUTER: MidiMessageChannel = MidiMessageChannel::new();
+static DIN_TO_ROUTER: MidiMessageChannel = MidiMessageChannel::new();
+static EXP_TO_ROUTER: MidiMessageChannel = MidiMessageChannel::new();
+
+static ROUTER_TO_USB: MidiMessageChannel = MidiMessageChannel::new();
+static ROUTER_TO_DIN: MidiMessageChannel = MidiMessageChannel::new();
 
 #[embassy_executor::main]
 async fn main(spawner: Spawner) {
-    // Clock configuration:
-    //   - System clock: HSI 16 MHz (default)
-    //   - HSE: 16 MHz external oscillator (on PF0/PF1)
-    //   - USB clock: HSI48 48 MHz via CRS (default for G4, sync_from_usb enabled by default)
     let mut config = Config::default();
     config.rcc.hse = Some(Hse {
         freq: Hertz(16_000_000),
@@ -40,19 +50,55 @@ async fn main(spawner: Spawner) {
 
     let p = embassy_stm32::init(config);
 
-    // PB12 (GPIO_LED1): on immediately after boot to confirm firmware is alive.
-    let _led_boot = Output::new(p.PB12, Level::High, Speed::Low);
+    let mut led_boot = Output::new(p.PB12, Level::Low, Speed::Low);
+    let mut led_init = Output::new(p.PB13, Level::Low, Speed::Low);
 
-    info!("Expresso firmware starting");
+    led_boot.set_high();
 
-    // USB MIDI
+    // Usb Midi
     let (usb_dev, midi_class) = usb_midi::build(p.USB, p.PA12, p.PA11);
     spawner.spawn(usb_midi::device_task(usb_dev)).unwrap();
-    spawner.spawn(usb_midi::io_task(midi_class, TO_USB.receiver(), MIDI_BUS.sender())).unwrap();
-
-    // Router: consumes MIDI_BUS, dispatches to TO_USB / TO_DIN.
     spawner
-        .spawn(router::task(MIDI_BUS.receiver(), TO_USB.sender(), TO_DIN.sender()))
+        .spawn(usb_midi::io_task(
+            midi_class,
+            ROUTER_TO_USB.receiver(),
+            USB_TO_ROUTER.sender(),
+        ))
+        .unwrap();
+
+    // Din Midi
+    let uart_config = {
+        let mut config = usart::Config::default();
+        config.baudrate = 31250;
+        config
+    };
+    let uart = Uart::new(
+        p.USART1,
+        p.PA10,
+        p.PA9,
+        Irqs,
+        p.DMA1_CH4,
+        p.DMA1_CH5,
+        uart_config,
+    )
+    .unwrap();
+    spawner
+        .spawn(din_midi::task(
+            uart,
+            ROUTER_TO_DIN.receiver(),
+            DIN_TO_ROUTER.sender(),
+        ))
+        .unwrap();
+
+    // Midi Router
+    spawner
+        .spawn(router::task(
+            USB_TO_ROUTER.receiver(),
+            DIN_TO_ROUTER.receiver(),
+            EXP_TO_ROUTER.receiver(),
+            ROUTER_TO_USB.sender(),
+            ROUTER_TO_DIN.sender(),
+        ))
         .unwrap();
 
     // // DIN MIDI: bidirectional bridge between the 5-pin DIN jack and the MIDI bus.
@@ -90,10 +136,7 @@ async fn main(spawner: Spawner) {
     // });
     // spawner.spawn(expression::expression_task(expression, MIDI_BUS.sender())).unwrap();
 
-    // PB13 (GPIO_LED2): on once all tasks are spawned and init is complete.
-    let _led_init = Output::new(p.PB13, Level::High, Speed::Low);
-
-    info!("All tasks spawned, initialisation complete");
+    led_init.set_high();
 
     // Keep main task alive so the LED Output guards are not dropped.
     core::future::pending::<()>().await
