@@ -2,7 +2,7 @@
     "rust-analyzer.server.path": "rust-analyzer",
     "rust-analyzer.linkedProjects": [
         "sw/Cargo.toml",
-        "common/Cargo.toml",
+        "expresso/Cargo.toml",
         "xtask/Cargo.toml",
         "fw/Cargo.toml"
     ],

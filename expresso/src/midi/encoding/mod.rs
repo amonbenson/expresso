@@ -1,6 +1,3 @@
-pub mod traits;
-pub use traits::{MidiDecoder, MidiEncoder, PacketSink};
-
 pub mod din;
 pub use din::{DinMidiDecoder, DinMidiEncoder};
 

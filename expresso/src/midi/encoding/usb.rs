@@ -1,5 +1,5 @@
+use super::super::traits::{MidiDecoder, MidiEncoder, PacketSink};
 use super::super::types::MidiMessage;
-use super::traits::{MidiDecoder, MidiEncoder, PacketSink};
 
 // ---- USB MIDI Encoder ----
 

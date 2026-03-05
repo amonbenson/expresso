@@ -1,3 +1,9 @@
+pub trait Adjustable {
+    type Settings;
+
+    fn update_settings(&mut self, settings: &Self::Settings);
+}
+
 #[derive(Default, Debug, Clone, Copy, PartialEq)]
 pub enum InputMode {
     #[default]
@@ -7,27 +13,28 @@ pub enum InputMode {
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ContinuousSettings {
-    pub minimum_input: u8,
-    pub maximum_input: u8,
+    pub minimum_input: f32,
+    pub maximum_input: f32,
     pub minimum_output: u8,
     pub maximum_output: u8,
-    pub drive: u8,
+    pub drive: f32,
 }
 
 impl Default for ContinuousSettings {
     fn default() -> Self {
         Self {
-            minimum_input: 0,
-            maximum_input: 127,
+            minimum_input: 0.0,
+            maximum_input: 1.0,
             minimum_output: 0,
             maximum_output: 127,
-            drive: 64,
+            drive: 0.5,
         }
     }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct SwitchSettings {
+    pub invert_polarity: bool,
     pub released_value: u8,
     pub pressed_value: u8,
 }
@@ -35,6 +42,7 @@ pub struct SwitchSettings {
 impl Default for SwitchSettings {
     fn default() -> Self {
         Self {
+            invert_polarity: false,
             released_value: 0,
             pressed_value: 127,
         }

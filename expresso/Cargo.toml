@@ -1,5 +1,5 @@
 [package]
-name = "core"
+name = "expresso"
 version = "0.1.0"
 edition = "2024"
 
@@ -8,3 +8,4 @@ embassy = ["embassy-sync"]
 
 [dependencies]
 embassy-sync = { version = "0.7.2", optional = true }
+libm = "0.2.16"

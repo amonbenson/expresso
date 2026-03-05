@@ -12,5 +12,8 @@
 pub mod types;
 pub use types::MidiMessage;
 
+pub mod traits;
+pub use traits::{MidiDecoder, MidiEncoder, MidiMessageSink, PacketSink};
+
 pub mod encoding;
-pub use encoding::MidiEncoder;
+pub use encoding::*;

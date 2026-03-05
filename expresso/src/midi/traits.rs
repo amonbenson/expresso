@@ -1,4 +1,10 @@
-use super::super::types::MidiMessage;
+use super::types::MidiMessage;
+
+pub trait MidiMessageSink {
+    type Error;
+
+    fn try_send(&mut self, message: MidiMessage) -> Result<(), Self::Error>;
+}
 
 pub trait PacketSink {
     type Packet;
