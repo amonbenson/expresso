@@ -1,119 +1,98 @@
 use defmt::{info, warn};
-use embassy_futures::join::join;
 use embassy_futures::select::{select, Either};
 use embassy_stm32::usb::Driver;
 use embassy_stm32::{peripherals, Peri};
-use embassy_usb::class::midi::{MidiClass, Receiver as MidiReceiver_, Sender as MidiSender_};
+use embassy_usb::UsbDevice;
+use embassy_usb::class::midi::{MidiClass, Receiver as MidiRx, Sender as MidiTx};
 use embassy_usb::Builder;
 use static_cell::StaticCell;
 
-use crate::midi::{MidiBridge, MidiEvent, MidiMessage, MidiPeripheral, MidiReceiver, MidiSender};
+use crate::midi::{MidiEvent, MidiMessage, MidiPeripheral, MidiReceiver, MidiSender};
 
 // ---------------------------------------------------------------------------
-// Config
+// Convenience type aliases
 // ---------------------------------------------------------------------------
 
-/// Construction parameters for [`UsbMidi`].
+pub type UsbDriver  = Driver<'static, peripherals::USB>;
+pub type UsbDev     = UsbDevice<'static, UsbDriver>;
+pub type UsbMidi    = MidiClass<'static, UsbDriver>;
+
+// ---------------------------------------------------------------------------
+// Build — mirrors the inline CDC setup in main.rs, adapted for MIDI
+// ---------------------------------------------------------------------------
+
+/// Initialise the USB driver, build the USB device, and register the
+/// USB MIDI 1.0 class.  Returns the device handle (for [`device_task`])
+/// and the MIDI class handle (for [`io_task`]).
 ///
-/// Pins (from expresso.ioc): PA11 = USB_DM, PA12 = USB_DP
-pub struct UsbMidiConfig {
-    pub usb: Peri<'static, peripherals::USB>,
-    pub dp:  Peri<'static, peripherals::PA12>,
-    pub dm:  Peri<'static, peripherals::PA11>,
-}
-
-// ---------------------------------------------------------------------------
-// Driver struct
-// ---------------------------------------------------------------------------
-
-/// USB MIDI 1.0 peripheral driver.
-///
-/// Presents a USB-MIDI 1.0 device to the host.
-///
-/// - **Inbound** (USB → bus): bytes received from the host are parsed into
-///   [`MidiEvent`]s and placed on the shared event bus via `to_bus`.
-/// - **Outbound** (bus → USB): [`MidiEvent`]s delivered by the router via
-///   `from_router` are serialised and sent to the host.
-pub struct UsbMidi {
+/// Must be called exactly once; uses `StaticCell` for descriptor buffers.
+pub fn build(
     usb: Peri<'static, peripherals::USB>,
     dp:  Peri<'static, peripherals::PA12>,
     dm:  Peri<'static, peripherals::PA11>,
-}
+) -> (UsbDev, UsbMidi) {
+    let driver = Driver::new(usb, crate::Irqs, dp, dm);
 
-impl UsbMidi {
-    pub fn new(config: UsbMidiConfig) -> Self {
-        Self { usb: config.usb, dp: config.dp, dm: config.dm }
-    }
-}
+    let usb_config = {
+        let mut c = embassy_usb::Config::new(0x1209, 0x2156);
+        c.manufacturer    = Some("Amon Benson");
+        c.product         = Some("Expresso");
+        c.serial_number   = Some("12345678");
+        c.max_power       = 100;
+        c.max_packet_size_0 = 64;
+        c
+    };
 
-// ---------------------------------------------------------------------------
-// MidiBridge impl
-// ---------------------------------------------------------------------------
+    let mut builder = {
+        static CONFIG_DESC: StaticCell<[u8; 256]> = StaticCell::new();
+        static BOS_DESC:    StaticCell<[u8; 32]>  = StaticCell::new();
+        static CONTROL_BUF: StaticCell<[u8; 64]>  = StaticCell::new();
 
-impl MidiBridge for UsbMidi {
-    async fn run(self, from_router: MidiReceiver<'static>, to_bus: MidiSender<'static>) {
-        info!("USB MIDI task started");
-
-        // Static descriptor buffers. These must outlive the USB device, and
-        // since we hold `Peri<'static, USB>` the driver is `'static` too.
-        static CONFIG_DESC:  StaticCell<[u8; 256]> = StaticCell::new();
-        static BOS_DESC:     StaticCell<[u8; 32]>  = StaticCell::new();
-        static MSOS_DESC:    StaticCell<[u8; 1]>   = StaticCell::new();
-        static CONTROL_BUF:  StaticCell<[u8; 64]>  = StaticCell::new();
-
-        let config_desc  = CONFIG_DESC.init([0u8; 256]);
-        let bos_desc     = BOS_DESC.init([0u8; 32]);
-        let msos_desc    = MSOS_DESC.init([0u8; 1]);
-        let control_buf  = CONTROL_BUF.init([0u8; 64]);
-
-        let driver = Driver::new(self.usb, crate::Irqs, self.dp, self.dm);
-
-        let mut usb_config = embassy_usb::Config::new(0x1209, 0x2156);
-        usb_config.manufacturer = Some("Expresso");
-        usb_config.product      = Some("Expresso MIDI");
-        usb_config.serial_number = Some("00000001");
-        usb_config.max_power    = 100;
-
-        let mut builder = Builder::new(
+        Builder::new(
             driver,
             usb_config,
-            config_desc,
-            bos_desc,
-            msos_desc,
-            control_buf,
-        );
+            CONFIG_DESC.init([0; 256]),
+            BOS_DESC.init([0; 32]),
+            &mut [], // no MSOS descriptors
+            CONTROL_BUF.init([0; 64]),
+        )
+    };
 
-        let midi = MidiClass::new(&mut builder, 1, 1, 64);
-        let mut usb_dev = builder.build();
+    let midi = MidiClass::new(&mut builder, 1, 1, 64);
+    let device = builder.build();
 
-        join(usb_dev.run(), io_loop(midi, from_router, to_bus)).await;
-    }
+    (device, midi)
 }
 
 // ---------------------------------------------------------------------------
-// IO loop — runs concurrently with usb_dev.run()
+// Tasks
 // ---------------------------------------------------------------------------
 
-async fn io_loop(
-    midi: MidiClass<'static, Driver<'static, peripherals::USB>>,
+/// Runs the USB device stack — equivalent to `usb_task` in main.rs.
+#[embassy_executor::task]
+pub async fn device_task(mut usb: UsbDev) -> ! {
+    usb.run().await
+}
+
+/// Handles USB MIDI I/O: forwards events from the router to the USB host
+/// (TX) and from the USB host to the event bus (RX).
+///
+/// Re-connects automatically whenever the host disconnects.
+#[embassy_executor::task]
+pub async fn io_task(
+    midi: UsbMidi,
     from_router: MidiReceiver<'static>,
     to_bus: MidiSender<'static>,
 ) {
+    info!("USB MIDI IO task started");
+
     let (mut tx, mut rx) = midi.split();
 
     loop {
-        // Wait for the host to connect before doing any I/O.
         tx.wait_connection().await;
         info!("USB MIDI host connected");
 
-        // Run TX and RX concurrently; exit to reconnect loop on any error.
-        let result = select(
-            tx_loop(&mut tx, &from_router),
-            rx_loop(&mut rx, &to_bus),
-        )
-        .await;
-
-        match result {
+        match select(tx_loop(&mut tx, &from_router), rx_loop(&mut rx, &to_bus)).await {
             Either::First(_)  => warn!("USB MIDI TX loop exited"),
             Either::Second(_) => warn!("USB MIDI RX loop exited"),
         }
@@ -126,10 +105,7 @@ async fn io_loop(
 // TX — bus → USB host
 // ---------------------------------------------------------------------------
 
-async fn tx_loop(
-    tx: &mut MidiSender_<'static, Driver<'static, peripherals::USB>>,
-    from_router: &MidiReceiver<'static>,
-) {
+async fn tx_loop(tx: &mut MidiTx<'static, UsbDriver>, from_router: &MidiReceiver<'static>) {
     loop {
         let event = from_router.receive().await;
         if let Some(packet) = event_to_usb_packet(&event) {
@@ -144,10 +120,7 @@ async fn tx_loop(
 // RX — USB host → bus
 // ---------------------------------------------------------------------------
 
-async fn rx_loop(
-    rx: &mut MidiReceiver_<'static, Driver<'static, peripherals::USB>>,
-    to_bus: &MidiSender<'static>,
-) {
+async fn rx_loop(rx: &mut MidiRx<'static, UsbDriver>, to_bus: &MidiSender<'static>) {
     let mut buf = [0u8; 64];
     loop {
         let n = match rx.read_packet(&mut buf).await {
@@ -155,10 +128,8 @@ async fn rx_loop(
             Err(_) => return,
         };
 
-        // USB MIDI packets are 4 bytes each.
         for chunk in buf[..n].chunks_exact(4) {
-            let packet = [chunk[0], chunk[1], chunk[2], chunk[3]];
-            if let Some(message) = usb_packet_to_message(packet) {
+            if let Some(message) = usb_packet_to_message([chunk[0], chunk[1], chunk[2], chunk[3]]) {
                 let event = MidiEvent::new(MidiPeripheral::Usb, message);
                 if to_bus.try_send(event).is_err() {
                     warn!("USB MIDI RX: bus full, event dropped");
@@ -172,56 +143,35 @@ async fn rx_loop(
 // USB MIDI 1.0 serialisation helpers
 // ---------------------------------------------------------------------------
 
-/// Encode a [`MidiEvent`] as a 4-byte USB MIDI 1.0 packet.
-///
-/// Returns `None` for messages that have no USB MIDI representation.
 fn event_to_usb_packet(event: &MidiEvent) -> Option<[u8; 4]> {
-    // Cable number 0 is used throughout; CIN occupies the low nibble of byte 0.
     match event.message {
-        MidiMessage::NoteOn { channel, note, velocity } => {
-            let status = 0x90 | (channel & 0x0F);
-            Some([0x09, status, note, velocity])
-        }
-        MidiMessage::NoteOff { channel, note, velocity } => {
-            let status = 0x80 | (channel & 0x0F);
-            Some([0x08, status, note, velocity])
-        }
-        MidiMessage::ControlChange { channel, control, value } => {
-            let status = 0xB0 | (channel & 0x0F);
-            Some([0x0B, status, control, value])
-        }
-        MidiMessage::ProgramChange { channel, program } => {
-            let status = 0xC0 | (channel & 0x0F);
-            Some([0x0C, status, program, 0x00])
-        }
+        MidiMessage::NoteOn { channel, note, velocity } =>
+            Some([0x09, 0x90 | (channel & 0x0F), note, velocity]),
+        MidiMessage::NoteOff { channel, note, velocity } =>
+            Some([0x08, 0x80 | (channel & 0x0F), note, velocity]),
+        MidiMessage::ControlChange { channel, control, value } =>
+            Some([0x0B, 0xB0 | (channel & 0x0F), control, value]),
+        MidiMessage::ProgramChange { channel, program } =>
+            Some([0x0C, 0xC0 | (channel & 0x0F), program, 0x00]),
         MidiMessage::PitchBend { channel, value } => {
-            // Pitch bend: signed –8192…+8191 → unsigned 0…16383 (LSB first)
-            let unsigned = (value + 8192) as u16;
-            let lsb = (unsigned & 0x7F) as u8;
-            let msb = ((unsigned >> 7) & 0x7F) as u8;
-            let status = 0xE0 | (channel & 0x0F);
-            Some([0x0E, status, lsb, msb])
+            let u = (value + 8192) as u16;
+            Some([0x0E, 0xE0 | (channel & 0x0F), (u & 0x7F) as u8, ((u >> 7) & 0x7F) as u8])
         }
         MidiMessage::ActiveSensing => Some([0x0F, 0xFE, 0x00, 0x00]),
         MidiMessage::TimingClock   => Some([0x0F, 0xF8, 0x00, 0x00]),
     }
 }
 
-/// Decode a 4-byte USB MIDI 1.0 packet into a [`MidiMessage`].
-///
-/// Returns `None` for unrecognised or unsupported CIN codes.
 fn usb_packet_to_message(packet: [u8; 4]) -> Option<MidiMessage> {
-    let cin    = packet[0] & 0x0F; // cable-number is the high nibble; we ignore it
-    let status = packet[1];
-    let d1     = packet[2];
-    let d2     = packet[3];
-
+    let cin     = packet[0] & 0x0F;
+    let status  = packet[1];
+    let d1      = packet[2];
+    let d2      = packet[3];
     let channel = status & 0x0F;
 
     match cin {
         0x08 => Some(MidiMessage::NoteOff { channel, note: d1, velocity: d2 }),
         0x09 => {
-            // NoteOn with velocity 0 is conventionally treated as NoteOff.
             if d2 == 0 {
                 Some(MidiMessage::NoteOff { channel, note: d1, velocity: 0 })
             } else {
@@ -232,8 +182,7 @@ fn usb_packet_to_message(packet: [u8; 4]) -> Option<MidiMessage> {
         0x0C => Some(MidiMessage::ProgramChange { channel, program: d1 }),
         0x0E => {
             let raw = (d1 as u16) | ((d2 as u16) << 7);
-            let value = raw as i16 - 8192;
-            Some(MidiMessage::PitchBend { channel, value })
+            Some(MidiMessage::PitchBend { channel, value: raw as i16 - 8192 })
         }
         0x0F => match status {
             0xF8 => Some(MidiMessage::TimingClock),
@@ -242,17 +191,4 @@ fn usb_packet_to_message(packet: [u8; 4]) -> Option<MidiMessage> {
         },
         _ => None,
     }
-}
-
-// ---------------------------------------------------------------------------
-// Task
-// ---------------------------------------------------------------------------
-
-#[embassy_executor::task]
-pub async fn task(
-    driver: UsbMidi,
-    from_router: MidiReceiver<'static>,
-    to_bus: MidiSender<'static>,
-) {
-    driver.run(from_router, to_bus).await;
 }

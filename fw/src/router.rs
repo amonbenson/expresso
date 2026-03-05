@@ -12,23 +12,21 @@ pub async fn task(
     to_usb: MidiSender<'static>,
     to_din: MidiSender<'static>,
 ) {
-    info!("Router task started");
+    info!("Router task started (loopback: USB in → USB out)");
 
-    // loop {
-    //     let event = from_sources.receive().await;
-    //     let (send_usb, send_din) = routing.route(&event);
+    loop {
+        let event = from_sources.receive().await;
 
-    //     if send_usb {
-    //         if to_usb.try_send(event).is_err() {
-    //             warn!("USB output channel full. MIDI event dropped");
-    //         }
-    //     }
-    //     if send_din {
-    //         if to_din.try_send(event).is_err() {
-    //             warn!("DIN output channel full. MIDI event dropped");
-    //         }
-    //     }
-    // }
+        // Loopback: forward everything that arrives from USB back out to USB.
+        let send_usb = matches!(event.source, MidiPeripheral::Usb);
 
-    core::future::pending::<()>().await;
+        if send_usb {
+            if to_usb.try_send(event).is_err() {
+                warn!("Router: USB output channel full, event dropped");
+            }
+        }
+
+        // to_din unused during loopback test — suppress the dead-code path.
+        let _ = &to_din;
+    }
 }
