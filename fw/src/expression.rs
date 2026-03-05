@@ -1,199 +1,116 @@
-// use defmt::info;
-// use embassy_stm32::Peri;
-// use embassy_stm32::adc::{Adc, AdcConfig, AnyAdcChannel, SampleTime};
-// use embassy_stm32::peripherals::{ADC1, ADC2};
-// use embassy_time::{Duration, Timer};
+use embassy_stm32::adc::{Adc, AnyAdcChannel, BasicAdcRegs, Instance as AdcInstance, SampleTime};
+use embassy_stm32::peripherals::{ADC1, ADC2};
+use embassy_time::{Duration, Timer};
 
-// use crate::config::EXPRESSION_POLL_HZ;
-// use crate::midi::{MidiEvent, MidiMessage, MidiMessageSender, MidiPeripheral, MidiSource};
+use crate::config::EXPRESSION_POLL_HZ;
+use crate::midi::{MidiMessageReceiver, MidiMessageSender};
 
-// // ---------------------------------------------------------------------------
-// // Per-channel config (public) — one entry per TRS expression jack
-// // ---------------------------------------------------------------------------
+type StaticAdcChannel<T: AdcInstance> = AnyAdcChannel<'static, T>;
+type StaticAdc<T: AdcInstance> = Adc<'static, T>;
+type StaticAdc1 = Adc<'static, ADC1>;
+type StaticAdc2 = Adc<'static, ADC2>;
 
-// /// Configuration for one TRS expression input jack.
-// ///
-// /// `ADC` is the ADC peripheral type (`ADC1` or `ADC2`).
-// /// Channels are type-erased via [`AnyAdcChannel`] so that multiple jacks on
-// /// the same ADC can be collected into a fixed-size array without per-pin
-// /// type parameters leaking into [`ExpressionConfig`].
-// ///
-// /// Use [`embassy_stm32::adc::AdcChannel::degrade_adc`] on any ADC-capable pin
-// /// to obtain an [`AnyAdcChannel`]:
-// ///
-// /// ```ignore
-// /// ExpressionChannelConfig { v_tip: p.PA0.degrade_adc(), v_sleeve: p.PA1.degrade_adc(), cc: 11 }
-// /// ```
-// pub struct ExpressionChannelConfig<ADC: embassy_stm32::adc::Instance> {
-//     /// Expression signal — wiper of the potentiometer (V_tip).
-//     pub v_tip: AnyAdcChannel<'static, ADC>,
-//     /// Reference voltage — plug presence / supply calibration (V_sleeve).
-//     pub v_sleeve: AnyAdcChannel<'static, ADC>,
-//     /// MIDI CC number to emit when this jack's value changes.
-//     pub cc: u8,
-// }
+pub struct AdcInput<T: AdcInstance> {
+    channel: StaticAdcChannel<T>,
+}
 
-// // ---------------------------------------------------------------------------
-// // Driver config (public)
-// // ---------------------------------------------------------------------------
+impl<T> AdcInput<T>
+where
+    T: AdcInstance,
+    <T::Regs as BasicAdcRegs>::SampleTime: From<SampleTime>,
+{
+    pub fn new(channel: StaticAdcChannel<T>) -> Self {
+        Self { channel }
+    }
 
-// /// Construction parameters for [`ExpressionDriver`].
-// ///
-// /// `N1` is the number of jacks wired to ADC1; `N2` to ADC2.
-// ///
-// /// Example — default 2 + 2 layout:
-// /// ```ignore
-// /// ExpressionConfig {
-// ///     adc1: p.ADC1,
-// ///     adc1_channels: [
-// ///         ExpressionChannelConfig { v_tip: p.PA0.degrade_adc(), v_sleeve: p.PA1.degrade_adc(), cc: 11 },
-// ///         ExpressionChannelConfig { v_tip: p.PA2.degrade_adc(), v_sleeve: p.PA3.degrade_adc(), cc: 1  },
-// ///     ],
-// ///     adc2: p.ADC2,
-// ///     adc2_channels: [
-// ///         ExpressionChannelConfig { v_tip: p.PA4.degrade_adc(), v_sleeve: p.PA5.degrade_adc(), cc: 7  },
-// ///         ExpressionChannelConfig { v_tip: p.PA6.degrade_adc(), v_sleeve: p.PA7.degrade_adc(), cc: 74 },
-// ///     ],
-// ///     midi_channel: 0,
-// /// }
-// /// ```
-// pub struct ExpressionConfig<const N1: usize, const N2: usize> {
-//     pub adc1: Peri<'static, ADC1>,
-//     pub adc1_channels: [ExpressionChannelConfig<ADC1>; N1],
-//     pub adc2: Peri<'static, ADC2>,
-//     pub adc2_channels: [ExpressionChannelConfig<ADC2>; N2],
-//     /// MIDI channel for all CC messages from this driver (0-indexed, 0 = channel 1).
-//     pub midi_channel: u8,
-// }
+    pub fn read_raw(&mut self, adc: &mut StaticAdc<T>) -> u16 {
+        adc.blocking_read(&mut self.channel, SampleTime::CYCLES2_5.into())
+    }
 
-// // ---------------------------------------------------------------------------
-// // Internal per-channel state — defined via macro to sidestep the SampleTime
-// // associated-type issue that arises with a generic ADC type parameter.
-// // Each expansion produces a concrete struct for one ADC peripheral.
-// // ---------------------------------------------------------------------------
+    pub fn read_voltage(&mut self, adc: &mut StaticAdc<T>) -> f32 {
+        self.read_raw(adc).into()
+    }
+}
 
-// macro_rules! define_channel_state {
-//     ($name:ident, $adc:ty) => {
-//         struct $name {
-//             v_tip: AnyAdcChannel<'static, $adc>,
-//             v_sleeve: AnyAdcChannel<'static, $adc>,
-//             cc: u8,
-//             last_cc: u8,
-//         }
+pub struct ExpressionChannel<T: AdcInstance> {
+    v_ring: AdcInput<T>,
+    v_sleeve: AdcInput<T>,
+}
 
-//         impl $name {
-//             /// Sample V_tip and V_sleeve, returning a new CC value (0–127) only
-//             /// when the value has changed (simple equality check).
-//             ///
-//             /// Normalises by `v_sleeve` to compensate for supply variation.
-//             fn sample(&mut self, adc: &mut Adc<'static, $adc>) -> Option<u8> {
-//                 let tip = adc.blocking_read(&mut self.v_tip, SampleTime::CYCLES2_5) as u32;
-//                 let sleeve = adc.blocking_read(&mut self.v_sleeve, SampleTime::CYCLES2_5) as u32;
+impl<T> ExpressionChannel<T>
+where
+    T: AdcInstance,
+    <T::Regs as BasicAdcRegs>::SampleTime: From<SampleTime>,
+{
+    pub fn new(v_ring_channel: StaticAdcChannel<T>, v_sleeve_channel: StaticAdcChannel<T>) -> Self {
+        Self {
+            v_ring: AdcInput::new(v_ring_channel),
+            v_sleeve: AdcInput::new(v_sleeve_channel),
+        }
+    }
 
-//                 let raw = if sleeve > 0 {
-//                     (tip * 4095 / sleeve).min(4095)
-//                 } else {
-//                     tip
-//                 };
+    fn calculate_resistance(&self, v_ring: f32, v_sleeve: f32) -> (f32, f32) {
+        let v_cc: f32 = 3.3;
+        let r_14: f32 = 10.0;
+        let r_23: f32 = 100.0;
 
-//                 let cc = (raw * 127 / 4095) as u8;
-//                 if cc != self.last_cc {
-//                     self.last_cc = cc;
-//                     Some(cc)
-//                 } else {
-//                     None
-//                 }
-//             }
-//         }
-//     };
-// }
+        // calculate I using formula R_4 = V_Sleeve / I
+        let i = v_sleeve / r_14;
 
-// define_channel_state!(ChannelAdc1, ADC1);
-// define_channel_state!(ChannelAdc2, ADC2);
+        // calculate R_RS using formula R_RS || R_3 = (V_Ring - V_Sleeve) / I
+        let r_rs = 1.0 / (i / (v_ring - v_sleeve) - 1.0 / r_23);
 
-// // ---------------------------------------------------------------------------
-// // Driver struct
-// // ---------------------------------------------------------------------------
+        // calculate R_TR using formular R_TR || R_2 + R_1 = (V_CC - V_Ring) / I
+        let r_tr = 1.0 / (1.0 / ((v_cc - v_ring) / i - 1.0 / r_14) - 1.0 / r_23);
 
-// /// Expression pedal driver.
-// ///
-// /// Owns both ADC peripherals and all TRS expression input jacks.
-// /// `N1` jacks are serviced by ADC1; `N2` jacks by ADC2.
-// /// All channels are polled sequentially inside a single embassy task at
-// /// [`EXPRESSION_POLL_HZ`].
-// pub struct ExpressionDriver<const N1: usize, const N2: usize> {
-//     adc1: Adc<'static, ADC1>,
-//     adc1_chs: [ChannelAdc1; N1],
-//     adc2: Adc<'static, ADC2>,
-//     adc2_chs: [ChannelAdc2; N2],
-//     midi_channel: u8,
-// }
+        (r_tr, r_rs)
+    }
 
-// impl<const N1: usize, const N2: usize> ExpressionDriver<N1, N2> {
-//     pub fn new(config: ExpressionConfig<N1, N2>) -> Self {
-//         // [T; N]::map() consumes the array and transforms each element in place.
-//         let adc1_chs = config.adc1_channels.map(|ch| ChannelAdc1 {
-//             v_tip: ch.v_tip,
-//             v_sleeve: ch.v_sleeve,
-//             cc: ch.cc,
-//             last_cc: 0xFF,
-//         });
-//         let adc2_chs = config.adc2_channels.map(|ch| ChannelAdc2 {
-//             v_tip: ch.v_tip,
-//             v_sleeve: ch.v_sleeve,
-//             cc: ch.cc,
-//             last_cc: 0xFF,
-//         });
-//         Self {
-//             adc1: Adc::new(config.adc1, AdcConfig::default()),
-//             adc1_chs,
-//             adc2: Adc::new(config.adc2, AdcConfig::default()),
-//             adc2_chs,
-//             midi_channel: config.midi_channel,
-//         }
-//     }
+    pub fn process(&mut self, adc: &mut StaticAdc<T>, midi_in: MidiMessageSender<'static>) {
+        let v_ring = self.v_ring.read_voltage(adc);
+        let v_sleeve = self.v_sleeve.read_voltage(adc);
+        let (r_tip_ring, r_ring_sleve) = self.calculate_resistance(v_ring, v_sleeve);
+    }
+}
 
-//     async fn run(mut self, to_bus: MidiMessageSender<'static>) {
-//         info!("Expression task started ({} + {} channels)", N1, N2);
+pub struct ExpressionChannels(
+    pub ExpressionChannel<ADC1>,
+    pub ExpressionChannel<ADC1>,
+    pub ExpressionChannel<ADC2>,
+    pub ExpressionChannel<ADC2>,
+);
 
-//         let interval = Duration::from_hz(EXPRESSION_POLL_HZ);
+pub struct ExpressionGroup {
+    adc1: StaticAdc1,
+    adc2: StaticAdc2,
+    channels: ExpressionChannels,
+}
 
-//         loop {
-//             let adc1 = &mut self.adc1;
-//             for (i, ch) in self.adc1_chs.iter_mut().enumerate() {
-//                 if let Some(value) = ch.sample(adc1) {
-//                     emit_cc(&to_bus, i, self.midi_channel, ch.cc, value);
-//                 }
-//             }
+impl ExpressionGroup {
+    pub fn new(adc1: StaticAdc1, adc2: StaticAdc2, channels: ExpressionChannels) -> Self {
+        Self {
+            adc1,
+            adc2,
+            channels,
+        }
+    }
 
-//             let adc2 = &mut self.adc2;
-//             for (i, ch) in self.adc2_chs.iter_mut().enumerate() {
-//                 if let Some(value) = ch.sample(adc2) {
-//                     emit_cc(&to_bus, N1 + i, self.midi_channel, ch.cc, value);
-//                 }
-//             }
+    pub fn process(&mut self, midi_in: MidiMessageSender<'static>) {
+        // Process each channel individually
+        self.channels.0.process(&mut self.adc1, midi_in);
+        self.channels.1.process(&mut self.adc1, midi_in);
+        self.channels.2.process(&mut self.adc2, midi_in);
+        self.channels.3.process(&mut self.adc2, midi_in);
+    }
+}
 
-//             Timer::after(interval).await;
-//         }
-//     }
-// }
+#[embassy_executor::task]
+pub async fn task(mut exp: ExpressionGroup, midi_in: MidiMessageSender<'static>) {
+    let interval = Duration::from_hz(EXPRESSION_POLL_HZ);
 
-// fn emit_cc(to_bus: &MidiMessageSender<'static>, index: usize, midi_ch: u8, cc: u8, value: u8) {
-//     let event = MidiEvent::new(
-//         MidiPeripheral::Expression(index as u8),
-//         MidiMessage::ControlChange {
-//             channel: midi_ch,
-//             control: cc,
-//             value,
-//         },
-//     );
-//     if to_bus.try_send(event).is_err() {
-//         defmt::warn!("Expression ch{}: bus full, event dropped", index);
-//     }
-// }
+    loop {
+        exp.process(midi_in);
 
-// #[embassy_executor::task]
-// pub async fn expression_task(driver: ExpressionDriver<2, 2>, to_bus: MidiMessageSender<'static>) {
-//     use MidiSource;
-//     driver.run(to_bus).await;
-// }
+        Timer::after(interval).await;
+    }
+}

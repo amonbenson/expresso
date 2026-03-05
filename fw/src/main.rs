@@ -8,13 +8,16 @@ mod midi;
 mod router;
 mod usb_midi;
 
+use crate::expression::{ExpressionChannel, ExpressionChannels, ExpressionGroup};
 use embassy_executor::Spawner;
+use embassy_stm32::adc::{Adc, AdcChannel, AdcConfig};
 use embassy_stm32::gpio::{Level, Output, Speed};
 use embassy_stm32::rcc::{Hse, HseMode};
 use embassy_stm32::time::Hertz;
 use embassy_stm32::usart::Uart;
 use embassy_stm32::{Config, bind_interrupts, peripherals, usart, usb};
 use midi::MidiMessageChannel;
+
 use {defmt_rtt as _, panic_probe as _};
 
 bind_interrupts!(struct Irqs {
@@ -90,6 +93,23 @@ async fn main(spawner: Spawner) {
         ))
         .unwrap();
 
+    // Expression Pedals
+    let adc1 = Adc::new(p.ADC1, AdcConfig::default());
+    let adc2 = Adc::new(p.ADC2, AdcConfig::default());
+    let expression_group = ExpressionGroup::new(
+        adc1,
+        adc2,
+        ExpressionChannels(
+            ExpressionChannel::new(p.PA0.degrade_adc(), p.PA1.degrade_adc()),
+            ExpressionChannel::new(p.PA2.degrade_adc(), p.PA3.degrade_adc()),
+            ExpressionChannel::new(p.PA4.degrade_adc(), p.PA5.degrade_adc()),
+            ExpressionChannel::new(p.PA6.degrade_adc(), p.PA7.degrade_adc()),
+        ),
+    );
+    spawner
+        .spawn(expression::task(expression_group, EXP_TO_ROUTER.sender()))
+        .unwrap();
+
     // Midi Router
     spawner
         .spawn(router::task(
@@ -100,18 +120,6 @@ async fn main(spawner: Spawner) {
             ROUTER_TO_DIN.sender(),
         ))
         .unwrap();
-
-    // // DIN MIDI: bidirectional bridge between the 5-pin DIN jack and the MIDI bus.
-    // let din_midi = din_midi::DinMidi::new(din_midi::DinMidiConfig {
-    //     usart:  p.USART1,
-    //     tx_pin: p.PA9,
-    //     rx_pin: p.PA10,
-    //     tx_dma: p.DMA1_CH4,
-    //     rx_dma: p.DMA1_CH5,
-    // });
-    // spawner
-    //     .spawn(din_midi::task(din_midi, TO_DIN.receiver(), MIDI_BUS.sender()))
-    //     .unwrap();
 
     // // Expression pedals: producer-only, samples all four TRS jacks via ADC.
     // // Jack pin mapping (from expresso.ioc):
