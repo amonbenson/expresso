@@ -1,9 +1,11 @@
 use embassy_stm32::adc::{Adc, AnyAdcChannel, BasicAdcRegs, Instance as AdcInstance, SampleTime};
+use embassy_stm32::dac::Channel;
 use embassy_stm32::peripherals::{ADC1, ADC2};
 use embassy_time::{Duration, Timer};
 
-use crate::config::EXPRESSION_POLL_HZ;
+use crate::config::{EXPRESSION_NUM_CHANNELS, EXPRESSION_POLL_HZ};
 use crate::midi::{MidiMessageReceiver, MidiMessageSender};
+use crate::settings::{ChannelSettings, DeviceSettings};
 
 type StaticAdcChannel<T: AdcInstance> = AnyAdcChannel<'static, T>;
 type StaticAdc<T: AdcInstance> = Adc<'static, T>;
@@ -33,6 +35,7 @@ where
 }
 
 pub struct ExpressionChannel<T: AdcInstance> {
+    settings: ChannelSettings,
     v_ring: AdcInput<T>,
     v_sleeve: AdcInput<T>,
 }
@@ -44,6 +47,7 @@ where
 {
     pub fn new(v_ring_channel: StaticAdcChannel<T>, v_sleeve_channel: StaticAdcChannel<T>) -> Self {
         Self {
+            settings: ChannelSettings::default(),
             v_ring: AdcInput::new(v_ring_channel),
             v_sleeve: AdcInput::new(v_sleeve_channel),
         }
@@ -70,6 +74,10 @@ where
         let v_ring = self.v_ring.read_voltage(adc);
         let v_sleeve = self.v_sleeve.read_voltage(adc);
         let (r_tip_ring, r_ring_sleve) = self.calculate_resistance(v_ring, v_sleeve);
+    }
+
+    pub fn update_settings(&mut self, settings: &ChannelSettings) {
+        self.settings = *settings;
     }
 }
 
@@ -101,6 +109,14 @@ impl ExpressionGroup {
         self.channels.1.process(&mut self.adc1, midi_in);
         self.channels.2.process(&mut self.adc2, midi_in);
         self.channels.3.process(&mut self.adc2, midi_in);
+    }
+
+    pub fn update_settings(&mut self, settings: &[ChannelSettings; EXPRESSION_NUM_CHANNELS]) {
+        // Apply each channel's settings
+        self.channels.0.update_settings(&settings[0]);
+        self.channels.1.update_settings(&settings[1]);
+        self.channels.2.update_settings(&settings[2]);
+        self.channels.3.update_settings(&settings[3]);
     }
 }
 

@@ -1,9 +1,9 @@
 [workspace]
 resolver = "3"
 members = [
-    "sw",
+    "core",
     "fw",
-    "common",
+    "sw",
     "xtask",
 ]
 

@@ -6,6 +6,7 @@ mod din_midi;
 mod expression;
 mod midi;
 mod router;
+mod settings;
 mod usb_midi;
 
 use crate::expression::{ExpressionChannel, ExpressionChannels, ExpressionGroup};
