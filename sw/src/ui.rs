@@ -57,10 +57,10 @@ pub fn channel_strip<'a, Message: Clone + 'a>(
         //     button("S")
         //         .on_press_with(move || on_change(channel_clone.with_input_mode(InputMode::Switch)))
         //         .style(if channel.input.mode == InputMode::Switch { button::primary } else { button::text }),
-        //     button("M→T")
+        //     button("M->T")
         //         .on_press_with(move || on_change(channel_clone.with_input_mode(InputMode::MomentaryAsToggle)))
         //         .style(if channel.input.mode == InputMode::MomentaryAsToggle { button::primary } else { button::text }),
-        //     button("T→M")
+        //     button("T->M")
         //         .on_press_with(move || on_change(channel_clone.with_input_mode(InputMode::ToggleAsMomentary)))
         //         .style(if channel.input.mode == InputMode::ToggleAsMomentary { button::primary } else { button::text }),
         // ],

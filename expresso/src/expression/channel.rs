@@ -172,9 +172,6 @@ mod tests {
         }
     }
 
-    #[derive(Debug)]
-    struct SinkError;
-
     impl MidiMessageSink for MessageCollector {
         fn emit(&mut self, message: MidiMessage) {
             if let MidiMessage::ControlChange {
@@ -246,7 +243,7 @@ mod tests {
 
     #[test]
     fn continuous_midpoint_linear() {
-        // 0.5 * 127 = 63.5, roundf → 64
+        // 0.5 * 127 = 63.5, roundf -> 64
         assert_eq!(
             ExpressionChannel::apply_continuous_transform(0.5, linear_settings()),
             64
@@ -255,7 +252,7 @@ mod tests {
 
     #[test]
     fn continuous_quarter_linear() {
-        // 0.25 * 127 = 31.75, roundf → 32
+        // 0.25 * 127 = 31.75, roundf -> 32
         assert_eq!(
             ExpressionChannel::apply_continuous_transform(0.25, linear_settings()),
             32
@@ -353,8 +350,8 @@ mod tests {
             invert_polarity: true,
             ..SwitchSettings::default()
         };
-        assert_eq!(ExpressionChannel::apply_switch_transform(0.6, s), 0); // would be pressed, inverted → released
-        assert_eq!(ExpressionChannel::apply_switch_transform(0.4, s), 127); // would be released, inverted → pressed
+        assert_eq!(ExpressionChannel::apply_switch_transform(0.6, s), 0); // would be pressed, inverted -> released
+        assert_eq!(ExpressionChannel::apply_switch_transform(0.4, s), 127); // would be released, inverted -> pressed
     }
 
     #[test]
@@ -372,7 +369,7 @@ mod tests {
 
     #[test]
     fn process_first_call_sends_message() {
-        // Initial output is 0; any real pedal position produces a non-zero value → triggers send
+        // Initial output is 0; any real pedal position produces a non-zero value -> triggers send
         let mut settings = Settings::<4>::default();
         let mut sink = MessageCollector::new();
         let mut ch = ExpressionChannel::default();
@@ -387,7 +384,7 @@ mod tests {
         let mut ch = ExpressionChannel::default();
         ch.process((1.65, 0.275), &mut sink, &mut settings).unwrap();
         let count = sink.count;
-        ch.process((1.65, 0.275), &mut sink, &mut settings).unwrap(); // same voltages → same output
+        ch.process((1.65, 0.275), &mut sink, &mut settings).unwrap(); // same voltages -> same output
         assert_eq!(
             sink.count, count,
             "Expected no new message on unchanged output"
@@ -402,7 +399,7 @@ mod tests {
         ch.process((1.65, 0.275), &mut sink, &mut settings).unwrap(); // input ≈ 0.5
         let count = sink.count;
         ch.process((143.0 / 120.0, 0.275), &mut sink, &mut settings)
-            .unwrap(); // input ≈ 0.8 → different output
+            .unwrap(); // input ≈ 0.8 -> different output
         assert!(
             sink.count > count,
             "Expected a new message after output change"
@@ -411,7 +408,7 @@ mod tests {
 
     #[test]
     fn process_message_uses_correct_channel_and_cc() {
-        // Channel index 3 → MIDI channel 3, cc 5
+        // Channel index 3 -> MIDI channel 3, cc 5
         let mut settings = Settings::<4>::default();
         settings.expression.channels[3].cc = 5;
         let mut sink = MessageCollector::new();
@@ -426,7 +423,7 @@ mod tests {
 
     #[test]
     fn process_switch_active_on_high_resistance() {
-        // r_total ≈ 200k >> R_THRESH=10k → active → pressed_value=127
+        // r_total ≈ 200k >> R_THRESH=10k -> active -> pressed_value=127
         let mut settings = Settings::<4>::default();
         settings.expression.channels[0].input.mode = InputMode::Switch;
         let mut sink = MessageCollector::new();
@@ -440,15 +437,15 @@ mod tests {
 
     #[test]
     fn process_switch_inactive_on_zero_resistance() {
-        // First make it active, then short the pedal → output goes to released_value=0
+        // First make it active, then short the pedal -> output goes to released_value=0
         let mut settings = Settings::<4>::default();
         settings.expression.channels[0].input.mode = InputMode::Switch;
         let mut sink = MessageCollector::new();
 
         let mut ch = ExpressionChannel::default();
 
-        ch.process((1.65, 0.275), &mut sink, &mut settings).unwrap(); // active → 127
-        ch.process((1.65, 1.65), &mut sink, &mut settings).unwrap(); // r_total=0 < threshold → released → 0
+        ch.process((1.65, 0.275), &mut sink, &mut settings).unwrap(); // active -> 127
+        ch.process((1.65, 1.65), &mut sink, &mut settings).unwrap(); // r_total=0 < threshold -> released -> 0
         assert_eq!(sink.last().2, 0);
     }
 

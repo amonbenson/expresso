@@ -17,7 +17,7 @@ pub async fn task(
     usb_midi_out: MidiMessageSender<'static>,
     din_midi_out: MidiMessageSender<'static>,
 ) {
-    info!("Router task started (loopback: USB in → USB out)");
+    info!("Router task started (loopback: USB in -> USB out)");
 
     loop {
         let (source, message) = match select3(

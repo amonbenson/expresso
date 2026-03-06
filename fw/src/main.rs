@@ -124,10 +124,10 @@ async fn main(spawner: Spawner) {
 
     // // Expression pedals: producer-only, samples all four TRS jacks via ADC.
     // // Jack pin mapping (from expresso.ioc):
-    // //   Jack 0 — PA0 (V_tip), PA1 (V_sleeve) → ADC1,  CC 11 (Expression)
-    // //   Jack 1 — PA2 (V_tip), PA3 (V_sleeve) → ADC1,  CC  1 (Modulation)
-    // //   Jack 2 — PA4 (V_tip), PA5 (V_sleeve) → ADC2,  CC  7 (Volume)
-    // //   Jack 3 — PA6 (V_tip), PA7 (V_sleeve) → ADC2,  CC 74 (Brightness)
+    // //   Jack 0 — PA0 (V_tip), PA1 (V_sleeve) -> ADC1,  CC 11 (Expression)
+    // //   Jack 1 — PA2 (V_tip), PA3 (V_sleeve) -> ADC1,  CC  1 (Modulation)
+    // //   Jack 2 — PA4 (V_tip), PA5 (V_sleeve) -> ADC2,  CC  7 (Volume)
+    // //   Jack 3 — PA6 (V_tip), PA7 (V_sleeve) -> ADC2,  CC 74 (Brightness)
     // use embassy_stm32::adc::AdcChannel;
     // use expression::ExpressionDriver;
     // let expression = ExpressionDriver::new(expression::ExpressionConfig {
