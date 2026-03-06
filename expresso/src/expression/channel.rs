@@ -134,11 +134,14 @@ impl<const C: usize, S: MidiMessageSink> Component<C, S> for ExpressionChannel {
 
         // Emit the new value if it changed. Use our index as the MIDI channel
         if self.current_output != self.previous_output {
-            sink.emit(MidiMessage::ControlChange {
-                channel: (self.index as u8) % 128,
-                control: settings.cc,
-                value: self.current_output,
-            });
+            sink.emit(
+                MidiMessage::ControlChange {
+                    channel: (self.index as u8) % 128,
+                    control: settings.cc,
+                    value: self.current_output,
+                },
+                None,
+            );
         }
 
         Ok(())
@@ -147,6 +150,7 @@ impl<const C: usize, S: MidiMessageSink> Component<C, S> for ExpressionChannel {
 
 #[cfg(test)]
 mod tests {
+    use crate::midi::types::MidiEndpoint;
     use crate::settings::Settings;
 
     use super::*;
@@ -173,7 +177,7 @@ mod tests {
     }
 
     impl MidiMessageSink for MessageCollector {
-        fn emit(&mut self, message: MidiMessage) {
+        fn emit(&mut self, message: MidiMessage, _target: Option<MidiEndpoint>) {
             if let MidiMessage::ControlChange {
                 channel,
                 control,

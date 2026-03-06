@@ -53,6 +53,7 @@ impl<const C: usize, S: MidiMessageSink> Component<C, S> for ExpressionGroup<C> 
 mod tests {
     use super::*;
     use crate::component::Component;
+    use crate::midi::types::MidiEndpoint;
     use crate::midi::{MidiMessage, MidiMessageSink};
     use crate::settings::Settings;
 
@@ -67,7 +68,7 @@ mod tests {
     }
 
     impl MidiMessageSink for MessageCollector {
-        fn emit(&mut self, _message: MidiMessage) {
+        fn emit(&mut self, _message: MidiMessage, _target: Option<MidiEndpoint>) {
             self.count += 1;
         }
     }

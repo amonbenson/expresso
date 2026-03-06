@@ -1,7 +1,7 @@
-use super::types::MidiMessage;
+use super::types::{MidiEndpoint, MidiMessage};
 
 pub trait MidiMessageSink {
-    fn emit(&mut self, message: MidiMessage);
+    fn emit(&mut self, message: MidiMessage, target: Option<MidiEndpoint>);
 }
 
 pub trait PacketSink {

@@ -7,3 +7,10 @@ pub enum MidiMessage<'a> {
     PitchBend { channel: u8, value: i16 },
     Sysex(&'a [u8]),
 }
+
+#[derive(Clone, Copy, Debug)]
+pub enum MidiEndpoint {
+    Usb,
+    Din,
+    Expression,
+}

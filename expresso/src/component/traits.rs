@@ -1,3 +1,4 @@
+use crate::midi::types::MidiEndpoint;
 use crate::midi::{MidiMessage, MidiMessageSink};
 use crate::settings::Settings;
 
@@ -7,11 +8,13 @@ pub trait Component<const C: usize, S: MidiMessageSink> {
 
     fn handle_message(
         &mut self,
-        msg: MidiMessage,
+        message: MidiMessage,
+        source: MidiEndpoint,
         sink: &mut S,
         settings: &mut Settings<C>,
     ) -> Result<(), Self::Error> {
-        let _ = msg;
+        let _ = message;
+        let _ = source;
         let _ = sink;
         let _ = settings;
         Ok(())
@@ -22,5 +25,10 @@ pub trait Component<const C: usize, S: MidiMessageSink> {
         inputs: Self::ProcessInputs,
         sink: &mut S,
         settings: &mut Settings<C>,
-    ) -> Result<(), Self::Error>;
+    ) -> Result<(), Self::Error> {
+        let _ = inputs;
+        let _ = sink;
+        let _ = settings;
+        Ok(())
+    }
 }
