@@ -57,13 +57,13 @@ pub struct InputSettings {
 }
 
 #[derive(Default, Debug, Clone, Copy)]
-pub struct ChannelSettings {
+pub struct ExpressionChannelSettings {
     pub input: InputSettings,
     pub cc: u8,
-    pub label: [u8; ChannelSettings::LABEL_SIZE],
+    pub label: [u8; ExpressionChannelSettings::LABEL_SIZE],
 }
 
-impl ChannelSettings {
+impl ExpressionChannelSettings {
     const LABEL_SIZE: usize = 32;
 
     pub fn new(index: usize) -> Self {
@@ -88,17 +88,22 @@ impl ChannelSettings {
     }
 }
 
-#[derive(Debug)]
-pub struct DeviceSettings<const C: usize> {
-    pub channels: [ChannelSettings; C],
+#[derive(Debug, Clone, Copy)]
+pub struct ExpressionGroupSettings<const C: usize> {
+    pub channels: [ExpressionChannelSettings; C],
 }
 
-impl<const C: usize> Default for DeviceSettings<C> {
+impl<const C: usize> Default for ExpressionGroupSettings<C> {
     fn default() -> Self {
         Self {
-            channels: core::array::from_fn(ChannelSettings::new),
+            channels: core::array::from_fn(ExpressionChannelSettings::new),
         }
     }
+}
+
+#[derive(Default, Debug, Clone, Copy)]
+pub struct Settings<const C: usize> {
+    pub expression: ExpressionGroupSettings<C>,
 }
 
 #[cfg(test)]
@@ -107,7 +112,7 @@ mod tests {
 
     #[test]
     fn convert_label() {
-        let mut settings = ChannelSettings::default();
+        let mut settings = ExpressionChannelSettings::default();
 
         // Check empty label
         settings.set_label_str("");

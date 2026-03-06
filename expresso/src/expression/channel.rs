@@ -1,10 +1,14 @@
 use libm::{expf, powf, roundf};
 
+use crate::component::{Component, ComponentError, ComponentResult};
 use crate::midi::{MidiMessage, MidiMessageSink};
-use crate::settings::{Adjustable, ChannelSettings, ContinuousSettings, InputMode, SwitchSettings};
+use crate::settings::{ContinuousSettings, InputMode, Settings, SwitchSettings};
 
-pub struct Channel {
-    settings: ChannelSettings,
+#[derive(Debug)]
+pub enum ExpressionChannelError {}
+
+#[derive(Default)]
+pub struct ExpressionChannel {
     index: usize,
     current_input: f32,
     previous_input: f32,
@@ -12,7 +16,7 @@ pub struct Channel {
     previous_output: u8,
 }
 
-impl Channel {
+impl ExpressionChannel {
     const V_CC: f32 = 3.3;
     const R_RAIL: f32 = 10.0;
     const R_PAR: f32 = 100.0;
@@ -22,17 +26,10 @@ impl Channel {
 
     const DRIVE_FACTOR: f32 = 5.0;
 
-    pub fn new(index: usize) -> Self {
+    pub fn from_index(index: usize) -> Self {
         Self {
-            settings: ChannelSettings {
-                cc: (index as u8) % 128,
-                ..Default::default()
-            },
             index,
-            current_input: 0.0,
-            previous_input: 0.0,
-            current_output: 0,
-            previous_output: 0,
+            ..Default::default()
         }
     }
 
@@ -85,12 +82,25 @@ impl Channel {
 
         value
     }
+}
 
-    pub fn process<S>(&mut self, v_ring: f32, v_sleeve: f32, sink: &mut S) -> Result<(), S::Error>
+impl<const C: usize, S: MidiMessageSink> Component<C, S> for ExpressionChannel {
+    type ProcessInputs = (f32, f32);
+    type Error = ExpressionChannelError;
+
+    fn process(
+        &mut self,
+        inputs: (f32, f32),
+        sink: &mut S,
+        settings: &mut Settings<C>,
+    ) -> ComponentResult<(), ExpressionChannelError, S>
     where
         S: MidiMessageSink,
     {
+        let settings = settings.expression.channels[self.index];
+
         // Calculate the resistance values
+        let (v_ring, v_sleeve) = inputs;
         let (r_tip_ring, r_ring_sleeve) = Self::calculate_resistance(v_ring, v_sleeve);
 
         // Limit the resistance range
@@ -100,7 +110,7 @@ impl Channel {
 
         // Calculate the new input value
         self.previous_input = self.current_input;
-        self.current_input = match self.settings.input.mode {
+        self.current_input = match settings.input.mode {
             InputMode::Continuous => r_ring_sleeve / r_total,
             InputMode::Switch => (r_total >= Self::R_THRESH) as u32 as f32,
         }
@@ -108,43 +118,38 @@ impl Channel {
 
         // Apply value transformations. This will also convert the input range 0..1 to MIDI range 0..127
         self.previous_output = self.current_output;
-        self.current_output = match self.settings.input.mode {
+        self.current_output = match settings.input.mode {
             InputMode::Continuous => {
-                Self::apply_continuous_transform(self.current_input, self.settings.input.continuous)
+                Self::apply_continuous_transform(self.current_input, settings.input.continuous)
             }
             InputMode::Switch => {
-                Self::apply_switch_transform(self.current_input, self.settings.input.switch)
+                Self::apply_switch_transform(self.current_input, settings.input.switch)
             }
         };
 
-        // Update the value if it changed
+        // Emit the new value if it changed. Use our index as the MIDI channel
         if self.current_output != self.previous_output {
-            sink.try_send(MidiMessage::ControlChange {
-                channel: (self.index as u8) % 128, // Use index as channel internally
-                control: self.settings.cc,
+            sink.emit(MidiMessage::ControlChange {
+                channel: (self.index as u8) % 128,
+                control: settings.cc,
                 value: self.current_output,
-            })?;
+            })
+            .map_err(ComponentError::Sink)?;
         }
 
         Ok(())
     }
 }
 
-impl Adjustable for Channel {
-    type Settings = ChannelSettings;
-
-    fn update_settings(&mut self, settings: &ChannelSettings) {
-        // Settings will automatically take effect on the next process() call
-        self.settings = *settings;
-    }
-}
-
 #[cfg(test)]
 mod tests {
+    use crate::settings::Settings;
+
     use super::*;
 
     // ---- Test helper ----
 
+    #[derive(Debug)]
     struct MessageCollector {
         messages: [(u8, u8, u8); 16], // (channel, control, value)
         count: usize,
@@ -169,7 +174,7 @@ mod tests {
     impl MidiMessageSink for MessageCollector {
         type Error = SinkError;
 
-        fn try_send(&mut self, message: MidiMessage) -> Result<(), SinkError> {
+        fn emit(&mut self, message: MidiMessage) -> Result<(), SinkError> {
             if let MidiMessage::ControlChange {
                 channel,
                 control,
@@ -189,7 +194,7 @@ mod tests {
     fn resistance_symmetric() {
         // R_TR = R_RS = R_PAR = 100k (symmetric pedal at midpoint)
         // Gives v_sleeve=0.275, v_ring=1.65
-        let (r1, r2) = Channel::calculate_resistance(1.65, 0.275);
+        let (r1, r2) = ExpressionChannel::calculate_resistance(1.65, 0.275);
         assert!((r1 - 100.0).abs() < 0.01, "r1={r1}");
         assert!((r2 - 100.0).abs() < 0.01, "r2={r2}");
     }
@@ -200,7 +205,7 @@ mod tests {
         // Derived: v_sleeve=0.275, v_ring=143/120≈1.1917
         // Function returns (r_tr_code=50, r_rs_code=200) due to internal naming
         let v_ring = 143.0_f32 / 120.0;
-        let (r1, r2) = Channel::calculate_resistance(v_ring, 0.275);
+        let (r1, r2) = ExpressionChannel::calculate_resistance(v_ring, 0.275);
         assert!((r1 - 50.0).abs() < 0.01, "r1={r1}");
         assert!((r2 - 200.0).abs() < 0.01, "r2={r2}");
     }
@@ -208,7 +213,7 @@ mod tests {
     #[test]
     fn resistance_both_zero() {
         // v_ring = v_sleeve = v_tip = 1.65 (all nodes at same voltage, both pedal resistors shorted)
-        let (r1, r2) = Channel::calculate_resistance(1.65, 1.65);
+        let (r1, r2) = ExpressionChannel::calculate_resistance(1.65, 1.65);
         assert!((r1 - 0.0).abs() < 0.01, "r1={r1}");
         assert!((r2 - 0.0).abs() < 0.01, "r2={r2}");
     }
@@ -225,7 +230,7 @@ mod tests {
     #[test]
     fn continuous_zero_maps_to_zero() {
         assert_eq!(
-            Channel::apply_continuous_transform(0.0, linear_settings()),
+            ExpressionChannel::apply_continuous_transform(0.0, linear_settings()),
             0
         );
     }
@@ -233,7 +238,7 @@ mod tests {
     #[test]
     fn continuous_full_maps_to_127() {
         assert_eq!(
-            Channel::apply_continuous_transform(1.0, linear_settings()),
+            ExpressionChannel::apply_continuous_transform(1.0, linear_settings()),
             127
         );
     }
@@ -242,7 +247,7 @@ mod tests {
     fn continuous_midpoint_linear() {
         // 0.5 * 127 = 63.5, roundf → 64
         assert_eq!(
-            Channel::apply_continuous_transform(0.5, linear_settings()),
+            ExpressionChannel::apply_continuous_transform(0.5, linear_settings()),
             64
         );
     }
@@ -251,7 +256,7 @@ mod tests {
     fn continuous_quarter_linear() {
         // 0.25 * 127 = 31.75, roundf → 32
         assert_eq!(
-            Channel::apply_continuous_transform(0.25, linear_settings()),
+            ExpressionChannel::apply_continuous_transform(0.25, linear_settings()),
             32
         );
     }
@@ -265,9 +270,18 @@ mod tests {
             drive: 0.0,
             ..ContinuousSettings::default()
         };
-        assert_eq!(Channel::apply_continuous_transform(0.5, settings), 0); // at min
-        assert_eq!(Channel::apply_continuous_transform(1.0, settings), 127); // at max
-        assert_eq!(Channel::apply_continuous_transform(0.75, settings), 64); // midpoint
+        assert_eq!(
+            ExpressionChannel::apply_continuous_transform(0.5, settings),
+            0
+        ); // at min
+        assert_eq!(
+            ExpressionChannel::apply_continuous_transform(1.0, settings),
+            127
+        ); // at max
+        assert_eq!(
+            ExpressionChannel::apply_continuous_transform(0.75, settings),
+            64
+        ); // midpoint
     }
 
     #[test]
@@ -281,8 +295,8 @@ mod tests {
             drive: 1.0,
             ..ContinuousSettings::default()
         };
-        let out_linear = Channel::apply_continuous_transform(0.5, low_drive);
-        let out_driven = Channel::apply_continuous_transform(0.5, high_drive);
+        let out_linear = ExpressionChannel::apply_continuous_transform(0.5, low_drive);
+        let out_driven = ExpressionChannel::apply_continuous_transform(0.5, high_drive);
         assert!(
             out_driven > out_linear,
             "out_driven={out_driven} out_linear={out_linear}"
@@ -297,12 +311,12 @@ mod tests {
                 ..ContinuousSettings::default()
             };
             assert_eq!(
-                Channel::apply_continuous_transform(0.0, s),
+                ExpressionChannel::apply_continuous_transform(0.0, s),
                 0,
                 "drive={drive}"
             );
             assert_eq!(
-                Channel::apply_continuous_transform(1.0, s),
+                ExpressionChannel::apply_continuous_transform(1.0, s),
                 127,
                 "drive={drive}"
             );
@@ -314,22 +328,22 @@ mod tests {
     #[test]
     fn switch_above_threshold_is_pressed() {
         let s = SwitchSettings::default(); // released=0, pressed=127
-        assert_eq!(Channel::apply_switch_transform(0.51, s), 127);
-        assert_eq!(Channel::apply_switch_transform(1.0, s), 127);
+        assert_eq!(ExpressionChannel::apply_switch_transform(0.51, s), 127);
+        assert_eq!(ExpressionChannel::apply_switch_transform(1.0, s), 127);
     }
 
     #[test]
     fn switch_below_threshold_is_released() {
         let s = SwitchSettings::default();
-        assert_eq!(Channel::apply_switch_transform(0.49, s), 0);
-        assert_eq!(Channel::apply_switch_transform(0.0, s), 0);
+        assert_eq!(ExpressionChannel::apply_switch_transform(0.49, s), 0);
+        assert_eq!(ExpressionChannel::apply_switch_transform(0.0, s), 0);
     }
 
     #[test]
     fn switch_at_threshold_boundary_is_released() {
         // The condition is strictly `value > 0.5`, so 0.5 itself is released
         let s = SwitchSettings::default();
-        assert_eq!(Channel::apply_switch_transform(0.5, s), 0);
+        assert_eq!(ExpressionChannel::apply_switch_transform(0.5, s), 0);
     }
 
     #[test]
@@ -338,8 +352,8 @@ mod tests {
             invert_polarity: true,
             ..SwitchSettings::default()
         };
-        assert_eq!(Channel::apply_switch_transform(0.6, s), 0); // would be pressed, inverted → released
-        assert_eq!(Channel::apply_switch_transform(0.4, s), 127); // would be released, inverted → pressed
+        assert_eq!(ExpressionChannel::apply_switch_transform(0.6, s), 0); // would be pressed, inverted → released
+        assert_eq!(ExpressionChannel::apply_switch_transform(0.4, s), 127); // would be released, inverted → pressed
     }
 
     #[test]
@@ -349,8 +363,8 @@ mod tests {
             released_value: 20,
             pressed_value: 100,
         };
-        assert_eq!(Channel::apply_switch_transform(0.6, s), 100);
-        assert_eq!(Channel::apply_switch_transform(0.4, s), 20);
+        assert_eq!(ExpressionChannel::apply_switch_transform(0.6, s), 100);
+        assert_eq!(ExpressionChannel::apply_switch_transform(0.4, s), 20);
     }
 
     // ---- process ----
@@ -358,19 +372,21 @@ mod tests {
     #[test]
     fn process_first_call_sends_message() {
         // Initial output is 0; any real pedal position produces a non-zero value → triggers send
-        let mut ch = Channel::new(0);
+        let mut settings = Settings::<4>::default();
         let mut sink = MessageCollector::new();
-        ch.process(1.65, 0.275, &mut sink).unwrap();
+        let mut ch = ExpressionChannel::default();
+        ch.process((1.65, 0.275), &mut sink, &mut settings).unwrap();
         assert_eq!(sink.count, 1);
     }
 
     #[test]
     fn process_no_message_when_output_unchanged() {
-        let mut ch = Channel::new(0);
+        let mut settings = Settings::<4>::default();
         let mut sink = MessageCollector::new();
-        ch.process(1.65, 0.275, &mut sink).unwrap();
+        let mut ch = ExpressionChannel::default();
+        ch.process((1.65, 0.275), &mut sink, &mut settings).unwrap();
         let count = sink.count;
-        ch.process(1.65, 0.275, &mut sink).unwrap(); // same voltages → same output
+        ch.process((1.65, 0.275), &mut sink, &mut settings).unwrap(); // same voltages → same output
         assert_eq!(
             sink.count, count,
             "Expected no new message on unchanged output"
@@ -379,11 +395,13 @@ mod tests {
 
     #[test]
     fn process_sends_message_when_output_changes() {
-        let mut ch = Channel::new(0);
+        let mut settings = Settings::<4>::default();
         let mut sink = MessageCollector::new();
-        ch.process(1.65, 0.275, &mut sink).unwrap(); // input ≈ 0.5
+        let mut ch = ExpressionChannel::default();
+        ch.process((1.65, 0.275), &mut sink, &mut settings).unwrap(); // input ≈ 0.5
         let count = sink.count;
-        ch.process(143.0 / 120.0, 0.275, &mut sink).unwrap(); // input ≈ 0.8 → different output
+        ch.process((143.0 / 120.0, 0.275), &mut sink, &mut settings)
+            .unwrap(); // input ≈ 0.8 → different output
         assert!(
             sink.count > count,
             "Expected a new message after output change"
@@ -392,25 +410,29 @@ mod tests {
 
     #[test]
     fn process_message_uses_correct_channel_and_cc() {
-        // Channel index 5 → MIDI channel 5, cc 5
-        let mut ch = Channel::new(5);
+        // Channel index 3 → MIDI channel 3, cc 5
+        let mut settings = Settings::<4>::default();
+        settings.expression.channels[3].cc = 5;
         let mut sink = MessageCollector::new();
-        ch.process(1.65, 0.275, &mut sink).unwrap();
+
+        let mut ch = ExpressionChannel::from_index(3);
+
+        ch.process((1.65, 0.275), &mut sink, &mut settings).unwrap();
         let (midi_ch, cc, _) = sink.messages[0];
-        assert_eq!(midi_ch, 5);
+        assert_eq!(midi_ch, 3);
         assert_eq!(cc, 5);
     }
 
     #[test]
     fn process_switch_active_on_high_resistance() {
         // r_total ≈ 200k >> R_THRESH=10k → active → pressed_value=127
-        let mut ch = Channel::new(0);
-        let mut settings = ChannelSettings::new(0);
-        settings.input.mode = InputMode::Switch;
-        ch.update_settings(&settings);
-
+        let mut settings = Settings::<4>::default();
+        settings.expression.channels[0].input.mode = InputMode::Switch;
         let mut sink = MessageCollector::new();
-        ch.process(1.65, 0.275, &mut sink).unwrap();
+
+        let mut ch = ExpressionChannel::default();
+
+        ch.process((1.65, 0.275), &mut sink, &mut settings).unwrap();
         assert_eq!(sink.count, 1);
         assert_eq!(sink.last().2, 127);
     }
@@ -418,28 +440,26 @@ mod tests {
     #[test]
     fn process_switch_inactive_on_zero_resistance() {
         // First make it active, then short the pedal → output goes to released_value=0
-        let mut ch = Channel::new(0);
-        let mut settings = ChannelSettings::new(0);
-        settings.input.mode = InputMode::Switch;
-        ch.update_settings(&settings);
-
+        let mut settings = Settings::<4>::default();
+        settings.expression.channels[0].input.mode = InputMode::Switch;
         let mut sink = MessageCollector::new();
-        ch.process(1.65, 0.275, &mut sink).unwrap(); // active → 127
-        ch.process(1.65, 1.65, &mut sink).unwrap(); // r_total=0 < threshold → released → 0
+
+        let mut ch = ExpressionChannel::default();
+
+        ch.process((1.65, 0.275), &mut sink, &mut settings).unwrap(); // active → 127
+        ch.process((1.65, 1.65), &mut sink, &mut settings).unwrap(); // r_total=0 < threshold → released → 0
         assert_eq!(sink.last().2, 0);
     }
 
     #[test]
     fn process_uses_updated_cc() {
-        let mut ch = Channel::new(0);
-
         // Update CC to 42 before any processing
-        let mut settings = ChannelSettings::new(0);
-        settings.cc = 42;
-        ch.update_settings(&settings);
-
+        let mut settings = Settings::<4>::default();
+        settings.expression.channels[0].cc = 42;
         let mut sink = MessageCollector::new();
-        ch.process(1.65, 0.275, &mut sink).unwrap();
+        let mut ch = ExpressionChannel::default();
+
+        ch.process((1.65, 0.275), &mut sink, &mut settings).unwrap();
         assert_eq!(sink.count, 1);
         assert_eq!(
             sink.messages[0].1, 42,

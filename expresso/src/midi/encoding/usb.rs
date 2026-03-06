@@ -17,23 +17,23 @@ impl MidiEncoder for UsbMidiEncoder {
                 channel,
                 note,
                 velocity,
-            } => sink.try_send([0x09, 0x90 | (channel & 0x0F), *note, *velocity])?,
+            } => sink.emit([0x09, 0x90 | (channel & 0x0F), *note, *velocity])?,
             MidiMessage::NoteOff {
                 channel,
                 note,
                 velocity,
-            } => sink.try_send([0x08, 0x80 | (channel & 0x0F), *note, *velocity])?,
+            } => sink.emit([0x08, 0x80 | (channel & 0x0F), *note, *velocity])?,
             MidiMessage::ControlChange {
                 channel,
                 control,
                 value,
-            } => sink.try_send([0x0B, 0xB0 | (channel & 0x0F), *control, *value])?,
+            } => sink.emit([0x0B, 0xB0 | (channel & 0x0F), *control, *value])?,
             MidiMessage::ProgramChange { channel, program } => {
-                sink.try_send([0x0C, 0xC0 | (channel & 0x0F), *program, 0x00])?
+                sink.emit([0x0C, 0xC0 | (channel & 0x0F), *program, 0x00])?
             }
             MidiMessage::PitchBend { channel, value } => {
                 let u = (*value + 8192) as u16;
-                sink.try_send([
+                sink.emit([
                     0x0E,
                     0xE0 | (channel & 0x0F),
                     (u & 0x7F) as u8,
@@ -52,7 +52,7 @@ impl MidiEncoder for UsbMidiEncoder {
                         }
                         _ => [0x04, data[i], data[i + 1], data[i + 2]],
                     };
-                    sink.try_send(packet)?;
+                    sink.emit(packet)?;
                     i += 3;
                 }
             }
@@ -193,7 +193,7 @@ mod tests {
         type Packet = T;
         type Error = SinkFullError;
 
-        fn try_send(&mut self, packet: T) -> Result<(), SinkFullError> {
+        fn emit(&mut self, packet: T) -> Result<(), SinkFullError> {
             if self.len >= N {
                 return Err(SinkFullError);
             }

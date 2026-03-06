@@ -17,41 +17,41 @@ impl DinMidiEncoder {
                 note,
                 velocity,
             } => {
-                sink.try_send(0x90 | (channel & 0x0F))?;
-                sink.try_send(*note)?;
-                sink.try_send(*velocity)?;
+                sink.emit(0x90 | (channel & 0x0F))?;
+                sink.emit(*note)?;
+                sink.emit(*velocity)?;
             }
             MidiMessage::NoteOff {
                 channel,
                 note,
                 velocity,
             } => {
-                sink.try_send(0x80 | (channel & 0x0F))?;
-                sink.try_send(*note)?;
-                sink.try_send(*velocity)?;
+                sink.emit(0x80 | (channel & 0x0F))?;
+                sink.emit(*note)?;
+                sink.emit(*velocity)?;
             }
             MidiMessage::ControlChange {
                 channel,
                 control,
                 value,
             } => {
-                sink.try_send(0xB0 | (channel & 0x0F))?;
-                sink.try_send(*control)?;
-                sink.try_send(*value)?;
+                sink.emit(0xB0 | (channel & 0x0F))?;
+                sink.emit(*control)?;
+                sink.emit(*value)?;
             }
             MidiMessage::ProgramChange { channel, program } => {
-                sink.try_send(0xC0 | (channel & 0x0F))?;
-                sink.try_send(*program)?;
+                sink.emit(0xC0 | (channel & 0x0F))?;
+                sink.emit(*program)?;
             }
             MidiMessage::PitchBend { channel, value } => {
                 let u = (*value + 8192) as u16;
-                sink.try_send(0xE0 | (channel & 0x0F))?;
-                sink.try_send((u & 0x7F) as u8)?;
-                sink.try_send(((u >> 7) & 0x7F) as u8)?;
+                sink.emit(0xE0 | (channel & 0x0F))?;
+                sink.emit((u & 0x7F) as u8)?;
+                sink.emit(((u >> 7) & 0x7F) as u8)?;
             }
             MidiMessage::Sysex(data) => {
                 for &b in *data {
-                    sink.try_send(b)?;
+                    sink.emit(b)?;
                 }
             }
         }
@@ -228,7 +228,7 @@ mod tests {
         type Packet = T;
         type Error = SinkFullError;
 
-        fn try_send(&mut self, packet: T) -> Result<(), SinkFullError> {
+        fn emit(&mut self, packet: T) -> Result<(), SinkFullError> {
             if self.len >= N {
                 return Err(SinkFullError);
             }

@@ -3,14 +3,14 @@ use super::types::MidiMessage;
 pub trait MidiMessageSink {
     type Error;
 
-    fn try_send(&mut self, message: MidiMessage) -> Result<(), Self::Error>;
+    fn emit(&mut self, message: MidiMessage) -> Result<(), Self::Error>;
 }
 
 pub trait PacketSink {
     type Packet;
     type Error;
 
-    fn try_send(&mut self, packet: Self::Packet) -> Result<(), Self::Error>;
+    fn emit(&mut self, packet: Self::Packet) -> Result<(), Self::Error>;
 }
 
 pub trait MidiEncoder {
