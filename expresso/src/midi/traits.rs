@@ -1,9 +1,7 @@
 use super::types::MidiMessage;
 
 pub trait MidiMessageSink {
-    type Error;
-
-    fn emit(&mut self, message: MidiMessage) -> Result<(), Self::Error>;
+    fn emit(&mut self, message: MidiMessage);
 }
 
 pub trait PacketSink {

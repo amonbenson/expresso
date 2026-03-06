@@ -1,10 +1,11 @@
 use libm::{expf, powf, roundf};
+use snafu::Snafu;
 
-use crate::component::{Component, ComponentError, ComponentResult};
+use crate::component::Component;
 use crate::midi::{MidiMessage, MidiMessageSink};
 use crate::settings::{ContinuousSettings, InputMode, Settings, SwitchSettings};
 
-#[derive(Debug)]
+#[derive(Debug, Snafu)]
 pub enum ExpressionChannelError {}
 
 #[derive(Default)]
@@ -31,6 +32,10 @@ impl ExpressionChannel {
             index,
             ..Default::default()
         }
+    }
+
+    pub fn index(&self) -> usize {
+        self.index
     }
 
     pub fn calculate_resistance(v_ring: f32, v_sleeve: f32) -> (f32, f32) {
@@ -93,7 +98,7 @@ impl<const C: usize, S: MidiMessageSink> Component<C, S> for ExpressionChannel {
         inputs: (f32, f32),
         sink: &mut S,
         settings: &mut Settings<C>,
-    ) -> ComponentResult<(), ExpressionChannelError, S>
+    ) -> Result<(), ExpressionChannelError>
     where
         S: MidiMessageSink,
     {
@@ -133,8 +138,7 @@ impl<const C: usize, S: MidiMessageSink> Component<C, S> for ExpressionChannel {
                 channel: (self.index as u8) % 128,
                 control: settings.cc,
                 value: self.current_output,
-            })
-            .map_err(ComponentError::Sink)?;
+            });
         }
 
         Ok(())
@@ -172,9 +176,7 @@ mod tests {
     struct SinkError;
 
     impl MidiMessageSink for MessageCollector {
-        type Error = SinkError;
-
-        fn emit(&mut self, message: MidiMessage) -> Result<(), SinkError> {
+        fn emit(&mut self, message: MidiMessage) {
             if let MidiMessage::ControlChange {
                 channel,
                 control,
@@ -184,7 +186,6 @@ mod tests {
                 self.messages[self.count] = (channel, control, value);
                 self.count += 1;
             }
-            Ok(())
         }
     }
 
