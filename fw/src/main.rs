@@ -12,7 +12,10 @@ mod usb_midi;
 use embassy_executor::Spawner;
 use embassy_stm32::adc::{Adc, AdcChannel, AdcConfig};
 use embassy_stm32::gpio::{Level, Output, Speed};
-use embassy_stm32::rcc::{Hse, HseMode};
+use embassy_stm32::rcc::mux::{Adcsel, Clk48sel};
+use embassy_stm32::rcc::{
+    Hse, HseMode, Pll, PllMul, PllPDiv, PllPreDiv, PllQDiv, PllRDiv, PllSource,
+};
 use embassy_stm32::time::Hertz;
 use embassy_stm32::usart::Uart;
 use embassy_stm32::{Config, bind_interrupts, peripherals, usart, usb};
@@ -47,10 +50,22 @@ static ROUTER_TO_DIN: MsgChannel = Channel::new();
 #[embassy_executor::main]
 async fn main(spawner: Spawner) {
     let mut config = Config::default();
+    // Enable external crystal oscillator at 16 MHz
     config.rcc.hse = Some(Hse {
         freq: Hertz(16_000_000),
         mode: HseMode::Oscillator,
     });
+    // Configure PLL: HSE 16MHz -> /1 -> ×12 = 192 MHz VCO -> /4 = 48 MHz for ADC12
+    config.rcc.pll = Some(Pll {
+        source: PllSource::HSE,
+        prediv: PllPreDiv::DIV1,
+        mul: PllMul::MUL12,
+        divp: Some(PllPDiv::DIV4),
+        divq: Some(PllQDiv::DIV4), // 192MHz / 4 = 48MHz -> USB
+        divr: Some(PllRDiv::DIV2), // 192MHz / 2 = 96MHz -> PLLCLK (unused)
+    });
+    config.rcc.mux.adc12sel = Adcsel::PLL1_P;
+    config.rcc.mux.clk48sel = Clk48sel::PLL1_Q;
 
     let p = embassy_stm32::init(config);
 
@@ -96,10 +111,10 @@ async fn main(spawner: Spawner) {
 
     // Expression Pedals
     // Jack pin mapping:
-    //   Jack 0 — PA0 (V_ring), PA1 (V_sleeve) → ADC1
-    //   Jack 1 — PA2 (V_ring), PA3 (V_sleeve) → ADC1
-    //   Jack 2 — PA4 (V_ring), PA5 (V_sleeve) → ADC2
-    //   Jack 3 — PA6 (V_ring), PA7 (V_sleeve) → ADC2
+    //   Jack 0 — PA0 (V_ring), PA1 (V_sleeve) -> ADC1
+    //   Jack 1 — PA2 (V_ring), PA3 (V_sleeve) -> ADC1
+    //   Jack 2 — PA4 (V_ring), PA5 (V_sleeve) -> ADC2
+    //   Jack 3 — PA6 (V_ring), PA7 (V_sleeve) -> ADC2
     let adc1 = Adc::new(p.ADC1, AdcConfig::default());
     let adc2 = Adc::new(p.ADC2, AdcConfig::default());
     spawner
