@@ -1326,7 +1326,7 @@ dependencies = [
 
 [[package]]
 name = "expresso"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "embassy-sync",
  "libm",
@@ -1335,7 +1335,7 @@ dependencies = [
 
 [[package]]
 name = "expresso-fw"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "cortex-m",
  "cortex-m-rt",
