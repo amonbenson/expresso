@@ -3,9 +3,8 @@ use expresso::component::Component;
 use expresso::midi::types::MidiEndpoint;
 use expresso::midi::{MidiMessage, MidiMessageSink};
 use expresso::router::Router;
-use expresso::settings::Settings;
 
-use crate::{InMsgReceiver, MsgSender};
+use crate::{InMsgReceiver, MsgSender, SettingsMutex};
 
 // Routes decoded messages to the appropriate output channel based on the
 // target endpoint chosen by the library's Router component.
@@ -36,15 +35,21 @@ impl MidiMessageSink for RouterSink {
 }
 
 #[embassy_executor::task]
-pub async fn task(from: InMsgReceiver, to_usb: MsgSender, to_din: MsgSender) {
+pub async fn task(
+    from: InMsgReceiver,
+    to_usb: MsgSender,
+    to_din: MsgSender,
+    settings: &'static SettingsMutex,
+) {
     let mut router = Router::new();
-    let mut settings = Settings::<4>::default();
     let mut sink = RouterSink { to_usb, to_din };
 
     loop {
         let (message, source) = from.receive().await;
-        router
-            .handle_message(message, source, &mut sink, &mut settings)
-            .unwrap();
+        settings.lock(|s| {
+            router
+                .handle_message(message, source, &mut sink, &mut s.borrow_mut())
+                .unwrap();
+        });
     }
 }

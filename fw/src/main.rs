@@ -19,7 +19,11 @@ use embassy_stm32::rcc::{
 use embassy_stm32::time::Hertz;
 use embassy_stm32::usart::Uart;
 use embassy_stm32::{Config, bind_interrupts, peripherals, usart, usb};
+use core::cell::RefCell;
+use embassy_sync::blocking_mutex::Mutex;
 use embassy_sync::channel::Channel;
+use expresso::settings::Settings;
+use static_cell::StaticCell;
 use types::*;
 
 use {defmt_rtt as _, panic_probe as _};
@@ -71,6 +75,9 @@ async fn main(spawner: Spawner) {
 
     let mut led_boot = Output::new(p.PB12, Level::Low, Speed::Low);
     let mut led_init = Output::new(p.PB13, Level::Low, Speed::Low);
+
+    static SETTINGS: StaticCell<SettingsMutex> = StaticCell::new();
+    let settings = SETTINGS.init(Mutex::new(RefCell::new(Settings::default())));
 
     led_boot.set_high();
 
@@ -130,6 +137,7 @@ async fn main(spawner: Spawner) {
                 (p.PA6.degrade_adc(), p.PA7.degrade_adc()),
             ],
             TO_ROUTER.sender(),
+            settings,
         ))
         .unwrap();
 
@@ -139,6 +147,7 @@ async fn main(spawner: Spawner) {
             TO_ROUTER.receiver(),
             ROUTER_TO_USB.sender(),
             ROUTER_TO_DIN.sender(),
+            settings,
         ))
         .unwrap();
 
