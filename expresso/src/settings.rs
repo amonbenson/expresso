@@ -6,9 +6,10 @@ pub trait Adjustable {
 
 #[derive(Default, Debug, Clone, Copy, PartialEq)]
 pub enum InputMode {
-    #[default]
     Continuous,
     Switch,
+    #[default]
+    Compat,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
