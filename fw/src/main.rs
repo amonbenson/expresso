@@ -9,6 +9,7 @@ mod router;
 pub mod types;
 mod usb_midi;
 
+use core::cell::RefCell;
 use embassy_executor::Spawner;
 use embassy_stm32::adc::{Adc, AdcChannel, AdcConfig};
 use embassy_stm32::gpio::{Level, Output, Speed};
@@ -19,7 +20,6 @@ use embassy_stm32::rcc::{
 use embassy_stm32::time::Hertz;
 use embassy_stm32::usart::Uart;
 use embassy_stm32::{Config, bind_interrupts, peripherals, usart, usb};
-use core::cell::RefCell;
 use embassy_sync::blocking_mutex::Mutex;
 use embassy_sync::channel::Channel;
 use expresso::settings::Settings;
