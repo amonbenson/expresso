@@ -27,7 +27,10 @@ impl<const C: usize> ExpressionGroup<C> {
     }
 }
 
-impl<const C: usize, S: MidiMessageSink> Component<C, S> for ExpressionGroup<C> {
+impl<const C: usize, S> Component<C, S> for ExpressionGroup<C>
+where
+    S: MidiMessageSink,
+{
     type ProcessInputs = [(f32, f32); C];
     type Error = ExpressionGroupError;
 
@@ -57,19 +60,31 @@ mod tests {
     use crate::midi::{MidiMessage, MidiMessageSink};
     use crate::settings::Settings;
 
+    #[derive(Debug)]
     struct MessageCollector {
+        messages: [(u8, u8, u8); 32], // (channel, control, value)
         count: usize,
     }
 
     impl MessageCollector {
         fn new() -> Self {
-            Self { count: 0 }
+            Self {
+                messages: [(0, 0, 0); 32],
+                count: 0,
+            }
+        }
+
+        fn last(&self) -> (u8, u8, u8) {
+            self.messages[self.count - 1]
         }
     }
 
     impl MidiMessageSink for MessageCollector {
-        fn emit(&mut self, _message: MidiMessage, _target: Option<MidiEndpoint>) {
-            self.count += 1;
+        fn emit(&mut self, message: MidiMessage, _target: Option<MidiEndpoint>) {
+            if let MidiMessage::ControlChange { channel, control, value } = message {
+                self.messages[self.count] = (channel, control, value);
+                self.count += 1;
+            }
         }
     }
 
@@ -79,11 +94,44 @@ mod tests {
         let mut group = ExpressionGroup::<4>::new();
         let mut sink = MessageCollector::new();
         let mut settings = Settings::<4>::default();
-        // Symmetric midpoint input produces a non-zero output on each channel.
         group
             .process([(1.65, 0.275); 4], &mut sink, &mut settings)
             .unwrap();
         assert_eq!(sink.count, 4);
+    }
+
+    // Each channel uses its index as the MIDI channel number.
+    #[test]
+    fn each_channel_uses_correct_midi_channel() {
+        let mut group = ExpressionGroup::<4>::new();
+        let mut sink = MessageCollector::new();
+        let mut settings = Settings::<4>::default();
+        group
+            .process([(1.65, 0.275); 4], &mut sink, &mut settings)
+            .unwrap();
+        assert_eq!(sink.count, 4);
+        for i in 0..4 {
+            assert_eq!(sink.messages[i].0, i as u8, "channel {i} wrong MIDI channel");
+        }
+    }
+
+    // Each channel uses the CC number from settings.
+    #[test]
+    fn each_channel_uses_correct_cc() {
+        let mut group = ExpressionGroup::<3>::new();
+        let mut sink = MessageCollector::new();
+        let mut settings = Settings::<3>::default();
+        settings.expression.channels[0].cc = 10;
+        settings.expression.channels[1].cc = 20;
+        settings.expression.channels[2].cc = 30;
+        group
+            .process([(1.65, 0.275); 3], &mut sink, &mut settings)
+            .unwrap();
+        assert_eq!(sink.count, 3);
+        // Messages are emitted in channel order (0, 1, 2).
+        assert_eq!(sink.messages[0].1, 10, "channel 0 wrong CC");
+        assert_eq!(sink.messages[1].1, 20, "channel 1 wrong CC");
+        assert_eq!(sink.messages[2].1, 30, "channel 2 wrong CC");
     }
 
     // Single-channel group works (const generic edge case).
@@ -92,10 +140,14 @@ mod tests {
         let mut group = ExpressionGroup::<1>::new();
         let mut sink = MessageCollector::new();
         let mut settings = Settings::<1>::default();
+        settings.expression.channels[0].cc = 7;
         group
             .process([(1.65, 0.275)], &mut sink, &mut settings)
             .unwrap();
         assert_eq!(sink.count, 1);
+        let (midi_ch, cc, _) = sink.last();
+        assert_eq!(midi_ch, 0);
+        assert_eq!(cc, 7);
     }
 
     // No messages emitted when all channels repeat the same output.
@@ -114,7 +166,7 @@ mod tests {
         assert_eq!(sink.count, after_first);
     }
 
-    // Only the changed channel emits a new message.
+    // Only the changed channel emits a new message, with the correct channel number.
     #[test]
     fn only_changed_channel_emits() {
         let mut group = ExpressionGroup::<2>::new();
@@ -124,14 +176,16 @@ mod tests {
             .process([(1.65, 0.275); 2], &mut sink, &mut settings)
             .unwrap();
         let after_first = sink.count;
-        // Move channel 0 to a very different position; keep channel 1 unchanged.
+        // Move channel 1 to a very different position; keep channel 0 unchanged.
         group
             .process(
-                [(143.0 / 120.0, 0.275), (1.65, 0.275)],
+                [(1.65, 0.275), (143.0 / 120.0, 0.275)],
                 &mut sink,
                 &mut settings,
             )
             .unwrap();
         assert_eq!(sink.count, after_first + 1);
+        // The new message must come from MIDI channel 1.
+        assert_eq!(sink.last().0, 1, "expected message from MIDI channel 1");
     }
 }

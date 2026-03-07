@@ -1,4 +1,4 @@
-use super::super::traits::{MidiDecoder, PacketSink};
+use super::super::traits::{MidiDecoder, MidiEncoder, PacketSink};
 use super::super::types::MidiMessage;
 
 // ---- DIN MIDI Encoder ----
@@ -56,6 +56,17 @@ impl DinMidiEncoder {
             }
         }
         Ok(())
+    }
+}
+
+impl MidiEncoder for DinMidiEncoder {
+    type Packet = u8;
+
+    fn emit<S>(&mut self, message: &MidiMessage<'_>, sink: &mut S) -> Result<(), S::Error>
+    where
+        S: PacketSink<Packet = u8>,
+    {
+        self.emit_bytes(message, sink)
     }
 }
 

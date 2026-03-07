@@ -15,7 +15,10 @@ impl Router {
     }
 }
 
-impl<const C: usize, S: MidiMessageSink> Component<C, S> for Router {
+impl<const C: usize, S> Component<C, S> for Router
+where
+    S: MidiMessageSink,
+{
     type ProcessInputs = ();
     type Error = RouterError;
 

@@ -89,7 +89,10 @@ impl ExpressionChannel {
     }
 }
 
-impl<const C: usize, S: MidiMessageSink> Component<C, S> for ExpressionChannel {
+impl<const C: usize, S> Component<C, S> for ExpressionChannel
+where
+    S: MidiMessageSink,
+{
     type ProcessInputs = (f32, f32);
     type Error = ExpressionChannelError;
 
