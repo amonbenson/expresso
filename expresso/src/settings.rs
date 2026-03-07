@@ -1,10 +1,12 @@
+use serde::{Deserialize, Serialize};
+
 pub trait Adjustable {
     type Settings;
 
     fn update_settings(&mut self, settings: &Self::Settings);
 }
 
-#[derive(Default, Debug, Clone, Copy, PartialEq)]
+#[derive(Default, Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub enum InputMode {
     Continuous,
     Switch,
@@ -12,7 +14,7 @@ pub enum InputMode {
     Compat,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct ContinuousSettings {
     pub minimum_input: f32,
     pub maximum_input: f32,
@@ -33,7 +35,7 @@ impl Default for ContinuousSettings {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct SwitchSettings {
     pub invert_polarity: bool,
     pub released_value: u8,
@@ -50,14 +52,14 @@ impl Default for SwitchSettings {
     }
 }
 
-#[derive(Default, Debug, Clone, Copy, PartialEq)]
+#[derive(Default, Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct InputSettings {
     pub mode: InputMode,
     pub continuous: ContinuousSettings,
     pub switch: SwitchSettings,
 }
 
-#[derive(Default, Debug, Clone, Copy)]
+#[derive(Default, Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct ExpressionChannelSettings {
     pub input: InputSettings,
     pub cc: u8,
@@ -89,6 +91,9 @@ impl ExpressionChannelSettings {
     }
 }
 
+// Serde's derive can't satisfy `[ExpressionChannelSettings; C]: Serialize` for a const-generic
+// `C` in all serde versions, so Serialize/Deserialize are implemented manually using tuple
+// format (no length prefix), which matches postcard's wire format for fixed-size arrays.
 #[derive(Debug, Clone, Copy)]
 pub struct ExpressionGroupSettings<const C: usize> {
     pub channels: [ExpressionChannelSettings; C],
@@ -102,9 +107,64 @@ impl<const C: usize> Default for ExpressionGroupSettings<C> {
     }
 }
 
+impl<const C: usize> Serialize for ExpressionGroupSettings<C> {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        use serde::ser::SerializeTuple;
+        let mut tup = serializer.serialize_tuple(C)?;
+        for ch in &self.channels {
+            tup.serialize_element(ch)?;
+        }
+        tup.end()
+    }
+}
+
+impl<'de, const C: usize> Deserialize<'de> for ExpressionGroupSettings<C> {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        struct V<const C: usize>;
+
+        impl<'de, const C: usize> serde::de::Visitor<'de> for V<C> {
+            type Value = ExpressionGroupSettings<C>;
+
+            fn expecting(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+                write!(f, "a tuple of {C} ExpressionChannelSettings")
+            }
+
+            fn visit_seq<A: serde::de::SeqAccess<'de>>(
+                self,
+                mut seq: A,
+            ) -> Result<Self::Value, A::Error> {
+                let mut channels =
+                    core::array::from_fn(|_| ExpressionChannelSettings::default());
+                for (i, slot) in channels.iter_mut().enumerate() {
+                    *slot = seq
+                        .next_element()?
+                        .ok_or_else(|| serde::de::Error::invalid_length(i, &self))?;
+                }
+                Ok(ExpressionGroupSettings { channels })
+            }
+        }
+
+        deserializer.deserialize_tuple(C, V::<C>)
+    }
+}
+
 #[derive(Default, Debug, Clone, Copy)]
 pub struct Settings<const C: usize> {
     pub expression: ExpressionGroupSettings<C>,
+}
+
+impl<const C: usize> Serialize for Settings<C> {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        self.expression.serialize(serializer)
+    }
+}
+
+impl<'de, const C: usize> Deserialize<'de> for Settings<C> {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        Ok(Settings {
+            expression: ExpressionGroupSettings::deserialize(deserializer)?,
+        })
+    }
 }
 
 #[cfg(test)]

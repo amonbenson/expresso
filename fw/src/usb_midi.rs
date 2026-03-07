@@ -82,7 +82,7 @@ pub async fn io_task(
     let sysex_rx = sysex_ch.receiver();
 
     let mut sysex = SysexDispatcher::new(FW_VERSION_MAJOR, FW_VERSION_MINOR, FW_VERSION_PATCH);
-    let mut decoder = UsbMidiDecoder::<64>::new();
+    let mut decoder = UsbMidiDecoder::<320>::new();
 
     let (mut tx, mut rx) = midi.split();
 
@@ -93,18 +93,37 @@ pub async fn io_task(
         let tx_fut = async {
             let mut encoder = UsbMidiEncoder;
             loop {
-                let mut buffer = PacketBuffer::<16>::new();
                 match select(from_router.receive(), sysex_rx.receive()).await {
                     Either::First(message) => {
+                        // Regular MIDI messages fit in at most one packet.
+                        let mut buffer = PacketBuffer::<4>::new();
                         let _ = encoder.emit(&message, &mut buffer);
+                        for i in 0..buffer.len() {
+                            if tx.write_packet(buffer.get(i)).await.is_err() {
+                                return;
+                            }
+                        }
                     }
                     Either::Second(response) => {
-                        let _ = encoder.emit_sysex(&response.data[..response.len], &mut buffer);
-                    }
-                }
-                for i in 0..buffer.len() {
-                    if tx.write_packet(buffer.get(i)).await.is_err() {
-                        return;
+                        // SysEx responses can be large; stream packets directly
+                        // to avoid a fixed-size intermediate buffer overflow.
+                        let payload = &response.data[..response.len];
+                        let mut i = 0;
+                        while i < payload.len() {
+                            let remaining = payload.len() - i;
+                            let packet = match remaining {
+                                1 => [0x05, payload[i], 0x00, 0x00],
+                                2 => [0x06, payload[i], payload[i + 1], 0x00],
+                                r if r >= 3 && i + 3 >= payload.len() => {
+                                    [0x07, payload[i], payload[i + 1], payload[i + 2]]
+                                }
+                                _ => [0x04, payload[i], payload[i + 1], payload[i + 2]],
+                            };
+                            if tx.write_packet(&packet).await.is_err() {
+                                return;
+                            }
+                            i += 3;
+                        }
                     }
                 }
             }
