@@ -1,10 +1,12 @@
 #![no_std]
 #![no_main]
 
+pub mod collector;
 mod config;
 mod din_midi;
 mod expression;
 mod router;
+pub mod types;
 mod usb_midi;
 
 use embassy_executor::Spawner;
@@ -14,9 +16,8 @@ use embassy_stm32::rcc::{Hse, HseMode};
 use embassy_stm32::time::Hertz;
 use embassy_stm32::usart::Uart;
 use embassy_stm32::{Config, bind_interrupts, peripherals, usart, usb};
-use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
-use embassy_sync::channel::{Channel, Receiver, Sender};
-use expresso::midi::MidiMessage;
+use embassy_sync::channel::Channel;
+use types::*;
 
 use {defmt_rtt as _, panic_probe as _};
 
@@ -24,13 +25,6 @@ bind_interrupts!(struct Irqs {
     USB_LP => usb::InterruptHandler<peripherals::USB>;
     USART1 => usart::InterruptHandler<peripherals::USART1>;
 });
-
-// ---- Channel types ----
-
-const MSG_CAP: usize = 16;
-pub type MsgChannel = Channel<CriticalSectionRawMutex, MidiMessage<'static>, MSG_CAP>;
-pub type MsgSender = Sender<'static, CriticalSectionRawMutex, MidiMessage<'static>, MSG_CAP>;
-pub type MsgReceiver = Receiver<'static, CriticalSectionRawMutex, MidiMessage<'static>, MSG_CAP>;
 
 // ---- Static channels ----
 
@@ -45,37 +39,10 @@ pub type MsgReceiver = Receiver<'static, CriticalSectionRawMutex, MidiMessage<'s
 // │ Expression ├────►│          │
 // └────────────┘     └──────────┘
 
-static USB_TO_ROUTER: MsgChannel = Channel::new();
-static DIN_TO_ROUTER: MsgChannel = Channel::new();
-static EXP_TO_ROUTER: MsgChannel = Channel::new();
+static TO_ROUTER: InMsgChannel = Channel::new();
 
 static ROUTER_TO_USB: MsgChannel = Channel::new();
 static ROUTER_TO_DIN: MsgChannel = Channel::new();
-
-// ---- Helper: lift a borrowed MidiMessage into a 'static one ----
-// Sysex borrows its payload; all other variants own their data.
-pub fn to_static(msg: MidiMessage<'_>) -> Option<MidiMessage<'static>> {
-    match msg {
-        MidiMessage::NoteOn { channel, note, velocity } => {
-            Some(MidiMessage::NoteOn { channel, note, velocity })
-        }
-        MidiMessage::NoteOff { channel, note, velocity } => {
-            Some(MidiMessage::NoteOff { channel, note, velocity })
-        }
-        MidiMessage::ControlChange { channel, control, value } => {
-            Some(MidiMessage::ControlChange { channel, control, value })
-        }
-        MidiMessage::ProgramChange { channel, program } => {
-            Some(MidiMessage::ProgramChange { channel, program })
-        }
-        MidiMessage::PitchBend { channel, value } => {
-            Some(MidiMessage::PitchBend { channel, value })
-        }
-        MidiMessage::Sysex(_) => None,
-    }
-}
-
-// ---- Entry point ----
 
 #[embassy_executor::main]
 async fn main(spawner: Spawner) {
@@ -99,7 +66,7 @@ async fn main(spawner: Spawner) {
         .spawn(usb_midi::io_task(
             midi_class,
             ROUTER_TO_USB.receiver(),
-            USB_TO_ROUTER.sender(),
+            TO_ROUTER.sender(),
         ))
         .unwrap();
 
@@ -123,7 +90,7 @@ async fn main(spawner: Spawner) {
         .spawn(din_midi::task(
             uart,
             ROUTER_TO_DIN.receiver(),
-            DIN_TO_ROUTER.sender(),
+            TO_ROUTER.sender(),
         ))
         .unwrap();
 
@@ -147,16 +114,14 @@ async fn main(spawner: Spawner) {
                 (p.PA4.degrade_adc(), p.PA5.degrade_adc()),
                 (p.PA6.degrade_adc(), p.PA7.degrade_adc()),
             ],
-            EXP_TO_ROUTER.sender(),
+            TO_ROUTER.sender(),
         ))
         .unwrap();
 
     // Router
     spawner
         .spawn(router::task(
-            USB_TO_ROUTER.receiver(),
-            DIN_TO_ROUTER.receiver(),
-            EXP_TO_ROUTER.receiver(),
+            TO_ROUTER.receiver(),
             ROUTER_TO_USB.sender(),
             ROUTER_TO_DIN.sender(),
         ))

@@ -5,39 +5,17 @@ use embassy_stm32::{Peri, peripherals};
 use embassy_usb::Builder;
 use embassy_usb::UsbDevice;
 use embassy_usb::class::midi::MidiClass;
-use expresso::midi::{MidiDecoder, MidiEncoder, PacketSink, UsbMidiDecoder, UsbMidiEncoder};
+use expresso::midi::{MidiDecoder, MidiEncoder, UsbMidiDecoder, UsbMidiEncoder};
 use static_cell::StaticCell;
 
-use crate::{MsgReceiver, MsgSender};
+use crate::collector::Collector;
+use crate::{InMsgSender, MsgReceiver};
 
 pub type StaticDriver = Driver<'static, peripherals::USB>;
 pub type StaticDevice = UsbDevice<'static, StaticDriver>;
 pub type UsbMidi = MidiClass<'static, StaticDriver>;
 
-// Local sink that buffers encoded USB packets ([u8; 4]) for async write.
-struct PacketBuf<const N: usize> {
-    buf: [[u8; 4]; N],
-    len: usize,
-}
-
-impl<const N: usize> PacketBuf<N> {
-    fn new() -> Self {
-        Self { buf: [[0; 4]; N], len: 0 }
-    }
-}
-
-impl<const N: usize> PacketSink for PacketBuf<N> {
-    type Packet = [u8; 4];
-    type Error = core::convert::Infallible;
-
-    fn emit(&mut self, packet: [u8; 4]) -> Result<(), Self::Error> {
-        if self.len < N {
-            self.buf[self.len] = packet;
-            self.len += 1;
-        }
-        Ok(())
-    }
-}
+type PacketBuffer<const N: usize> = Collector<N, [u8; 4]>;
 
 pub fn build(
     usb: Peri<'static, peripherals::USB>,
@@ -50,7 +28,7 @@ pub fn build(
         let mut c = embassy_usb::Config::new(0x1209, 0x2156);
         c.manufacturer = Some("Amon Benson");
         c.product = Some("Expresso");
-        c.serial_number = Some("12345678");
+        c.serial_number = Some("62638335");
         c.max_power = 100;
         c.max_packet_size_0 = 64;
         c
@@ -83,7 +61,7 @@ pub async fn device_task(mut usb: StaticDevice) -> ! {
 }
 
 #[embassy_executor::task]
-pub async fn io_task(midi: UsbMidi, from_router: MsgReceiver, to_router: MsgSender) {
+pub async fn io_task(midi: UsbMidi, from_router: MsgReceiver, to_router: InMsgSender) {
     info!("USB MIDI IO task started");
 
     let (mut tx, mut rx) = midi.split();
@@ -97,10 +75,10 @@ pub async fn io_task(midi: UsbMidi, from_router: MsgReceiver, to_router: MsgSend
             let mut encoder = UsbMidiEncoder;
             loop {
                 let message = from_router.receive().await;
-                let mut buf = PacketBuf::<8>::new();
-                let _ = encoder.emit(&message, &mut buf);
-                for i in 0..buf.len {
-                    if tx.write_packet(&buf.buf[i]).await.is_err() {
+                let mut buffer = PacketBuffer::<8>::new();
+                let _ = encoder.emit(&message, &mut buffer);
+                for i in 0..buffer.len() {
+                    if tx.write_packet(buffer.get(i)).await.is_err() {
                         return;
                     }
                 }
@@ -116,9 +94,12 @@ pub async fn io_task(midi: UsbMidi, from_router: MsgReceiver, to_router: MsgSend
                 };
                 for chunk in buf[..n].chunks_exact(4) {
                     let packet = [chunk[0], chunk[1], chunk[2], chunk[3]];
-                    if let Some(msg) = decoder.feed(packet) {
-                        if let Some(static_msg) = crate::to_static(msg) {
-                            if to_router.try_send(static_msg).is_err() {
+                    if let Some(message) = decoder.feed(packet) {
+                        if let Some(message) = message.to_static() {
+                            if to_router
+                                .try_send((message, expresso::midi::types::MidiEndpoint::Usb))
+                                .is_err()
+                            {
                                 warn!("USB MIDI RX: channel full, message dropped");
                             }
                         }

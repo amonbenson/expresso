@@ -8,6 +8,47 @@ pub enum MidiMessage<'a> {
     Sysex(&'a [u8]),
 }
 
+impl<'a> MidiMessage<'a> {
+    pub fn to_static(self) -> Option<MidiMessage<'static>> {
+        match self {
+            MidiMessage::NoteOn {
+                channel,
+                note,
+                velocity,
+            } => Some(MidiMessage::NoteOn {
+                channel,
+                note,
+                velocity,
+            }),
+            MidiMessage::NoteOff {
+                channel,
+                note,
+                velocity,
+            } => Some(MidiMessage::NoteOff {
+                channel,
+                note,
+                velocity,
+            }),
+            MidiMessage::ControlChange {
+                channel,
+                control,
+                value,
+            } => Some(MidiMessage::ControlChange {
+                channel,
+                control,
+                value,
+            }),
+            MidiMessage::ProgramChange { channel, program } => {
+                Some(MidiMessage::ProgramChange { channel, program })
+            }
+            MidiMessage::PitchBend { channel, value } => {
+                Some(MidiMessage::PitchBend { channel, value })
+            }
+            MidiMessage::Sysex(_) => None,
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug)]
 pub enum MidiEndpoint {
     Usb,

@@ -7,18 +7,18 @@ use expresso::midi::types::MidiEndpoint;
 use expresso::midi::{MidiMessage, MidiMessageSink};
 use expresso::settings::Settings;
 
-use crate::{MsgSender, config::EXPRESSION_POLL_HZ};
+use crate::{InMsgSender, config::EXPRESSION_POLL_HZ};
 
 const VREF: f32 = 3.3;
 const ADC_MAX: f32 = 4095.0;
 
-// Forwards expression CC messages to the EXP_TO_ROUTER channel.
-struct ExpSink(MsgSender);
+// Forwards expression CC messages to the TO_ROUTER channel, tagged as Expression.
+struct ExpSink(InMsgSender);
 
 impl MidiMessageSink for ExpSink {
     fn emit(&mut self, message: MidiMessage<'_>, _target: Option<MidiEndpoint>) {
-        if let Some(msg) = crate::to_static(message) {
-            let _ = self.0.try_send(msg);
+        if let Some(msg) = message.to_static() {
+            let _ = self.0.try_send((msg, MidiEndpoint::Expression));
         }
     }
 }
@@ -29,7 +29,7 @@ pub async fn task(
     mut adc2: Adc<'static, ADC2>,
     mut adc1_channels: [(AnyAdcChannel<'static, ADC1>, AnyAdcChannel<'static, ADC1>); 2],
     mut adc2_channels: [(AnyAdcChannel<'static, ADC2>, AnyAdcChannel<'static, ADC2>); 2],
-    to_router: MsgSender,
+    to_router: InMsgSender,
 ) {
     let mut group = ExpressionGroup::<4>::new();
     let mut settings = Settings::<4>::default();

@@ -1,12 +1,11 @@
 use defmt::warn;
-use embassy_futures::select::{Either3, select3};
 use expresso::component::Component;
 use expresso::midi::types::MidiEndpoint;
 use expresso::midi::{MidiMessage, MidiMessageSink};
 use expresso::router::Router;
 use expresso::settings::Settings;
 
-use crate::{MsgReceiver, MsgSender};
+use crate::{InMsgReceiver, MsgSender};
 
 // Routes decoded messages to the appropriate output channel based on the
 // target endpoint chosen by the library's Router component.
@@ -17,7 +16,7 @@ struct RouterSink {
 
 impl MidiMessageSink for RouterSink {
     fn emit(&mut self, message: MidiMessage<'_>, target: Option<MidiEndpoint>) {
-        let Some(msg) = crate::to_static(message) else {
+        let Some(msg) = message.to_static() else {
             return;
         };
         match target {
@@ -37,30 +36,13 @@ impl MidiMessageSink for RouterSink {
 }
 
 #[embassy_executor::task]
-pub async fn task(
-    from_usb: MsgReceiver,
-    from_din: MsgReceiver,
-    from_exp: MsgReceiver,
-    to_usb: MsgSender,
-    to_din: MsgSender,
-) {
+pub async fn task(from: InMsgReceiver, to_usb: MsgSender, to_din: MsgSender) {
     let mut router = Router::new();
     let mut settings = Settings::<4>::default();
     let mut sink = RouterSink { to_usb, to_din };
 
     loop {
-        let (message, source) = match select3(
-            from_usb.receive(),
-            from_din.receive(),
-            from_exp.receive(),
-        )
-        .await
-        {
-            Either3::First(m) => (m, MidiEndpoint::Usb),
-            Either3::Second(m) => (m, MidiEndpoint::Din),
-            Either3::Third(m) => (m, MidiEndpoint::Expression),
-        };
-
+        let (message, source) = from.receive().await;
         router
             .handle_message(message, source, &mut sink, &mut settings)
             .unwrap();
