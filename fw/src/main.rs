@@ -94,7 +94,7 @@ async fn main(spawner: Spawner) {
     let uart = Uart::new(
         p.USART1,
         p.PA10,
-        p.PA9,
+        p.PB6, // TODO: Only for rev 1.0, revert to PA9 later
         Irqs,
         p.DMA1_CH4,
         p.DMA1_CH5,
