@@ -4,14 +4,40 @@ use embassy_stm32::usb::Driver;
 use embassy_stm32::{Peri, peripherals};
 use embassy_usb::Builder;
 use embassy_usb::UsbDevice;
-use embassy_usb::class::midi::{MidiClass, Receiver as MidiRx, Sender as MidiTx};
+use embassy_usb::class::midi::MidiClass;
+use expresso::midi::{MidiDecoder, MidiEncoder, PacketSink, UsbMidiDecoder, UsbMidiEncoder};
 use static_cell::StaticCell;
 
-use crate::midi::{MidiMessage, MidiMessageReceiver, MidiMessageSender};
+use crate::{MsgReceiver, MsgSender};
 
 pub type StaticDriver = Driver<'static, peripherals::USB>;
 pub type StaticDevice = UsbDevice<'static, StaticDriver>;
 pub type UsbMidi = MidiClass<'static, StaticDriver>;
+
+// Local sink that buffers encoded USB packets ([u8; 4]) for async write.
+struct PacketBuf<const N: usize> {
+    buf: [[u8; 4]; N],
+    len: usize,
+}
+
+impl<const N: usize> PacketBuf<N> {
+    fn new() -> Self {
+        Self { buf: [[0; 4]; N], len: 0 }
+    }
+}
+
+impl<const N: usize> PacketSink for PacketBuf<N> {
+    type Packet = [u8; 4];
+    type Error = core::convert::Infallible;
+
+    fn emit(&mut self, packet: [u8; 4]) -> Result<(), Self::Error> {
+        if self.len < N {
+            self.buf[self.len] = packet;
+            self.len += 1;
+        }
+        Ok(())
+    }
+}
 
 pub fn build(
     usb: Peri<'static, peripherals::USB>,
@@ -40,7 +66,7 @@ pub fn build(
             usb_config,
             CONFIG_DESC.init([0; 256]),
             BOS_DESC.init([0; 32]),
-            &mut [], // no MSOS descriptors
+            &mut [],
             CONTROL_BUF.init([0; 64]),
         )
     };
@@ -57,143 +83,56 @@ pub async fn device_task(mut usb: StaticDevice) -> ! {
 }
 
 #[embassy_executor::task]
-pub async fn io_task(
-    midi: UsbMidi,
-    midi_out: MidiMessageReceiver<'static>,
-    midi_in: MidiMessageSender<'static>,
-) {
+pub async fn io_task(midi: UsbMidi, from_router: MsgReceiver, to_router: MsgSender) {
     info!("USB MIDI IO task started");
 
     let (mut tx, mut rx) = midi.split();
+    let mut decoder = UsbMidiDecoder::<64>::new();
 
     loop {
         tx.wait_connection().await;
         info!("USB MIDI host connected");
 
-        match select(tx_loop(&mut tx, &midi_out), rx_loop(&mut rx, &midi_in)).await {
+        let tx_fut = async {
+            let mut encoder = UsbMidiEncoder;
+            loop {
+                let message = from_router.receive().await;
+                let mut buf = PacketBuf::<8>::new();
+                let _ = encoder.emit(&message, &mut buf);
+                for i in 0..buf.len {
+                    if tx.write_packet(&buf.buf[i]).await.is_err() {
+                        return;
+                    }
+                }
+            }
+        };
+
+        let rx_fut = async {
+            let mut buf = [0u8; 64];
+            loop {
+                let n = match rx.read_packet(&mut buf).await {
+                    Ok(n) => n,
+                    Err(_) => return,
+                };
+                for chunk in buf[..n].chunks_exact(4) {
+                    let packet = [chunk[0], chunk[1], chunk[2], chunk[3]];
+                    if let Some(msg) = decoder.feed(packet) {
+                        if let Some(static_msg) = crate::to_static(msg) {
+                            if to_router.try_send(static_msg).is_err() {
+                                warn!("USB MIDI RX: channel full, message dropped");
+                            }
+                        }
+                    }
+                }
+            }
+        };
+
+        match select(tx_fut, rx_fut).await {
             Either::First(_) => warn!("USB MIDI TX loop exited"),
             Either::Second(_) => warn!("USB MIDI RX loop exited"),
         }
 
+        decoder.reset();
         info!("USB MIDI host disconnected, waiting for reconnect");
-    }
-}
-
-async fn tx_loop(
-    tx: &mut MidiTx<'static, StaticDriver>,
-    from_router: &MidiMessageReceiver<'static>,
-) {
-    loop {
-        let message = from_router.receive().await;
-        if let Some(packet) = message_to_usb_packet(message) {
-            if tx.write_packet(&packet).await.is_err() {
-                return;
-            }
-        }
-    }
-}
-
-async fn rx_loop(rx: &mut MidiRx<'static, StaticDriver>, to_bus: &MidiMessageSender<'static>) {
-    let mut buf = [0u8; 64];
-    loop {
-        let n = match rx.read_packet(&mut buf).await {
-            Ok(n) => n,
-            Err(_) => return,
-        };
-
-        for chunk in buf[..n].chunks_exact(4) {
-            if let Some(message) = usb_packet_to_message([chunk[0], chunk[1], chunk[2], chunk[3]]) {
-                if to_bus.try_send(message).is_err() {
-                    warn!("USB MIDI RX: bus full, event dropped");
-                }
-            }
-        }
-    }
-}
-
-fn message_to_usb_packet(message: MidiMessage) -> Option<[u8; 4]> {
-    match message {
-        MidiMessage::NoteOn {
-            channel,
-            note,
-            velocity,
-        } => Some([0x09, 0x90 | (channel & 0x0F), note, velocity]),
-        MidiMessage::NoteOff {
-            channel,
-            note,
-            velocity,
-        } => Some([0x08, 0x80 | (channel & 0x0F), note, velocity]),
-        MidiMessage::ControlChange {
-            channel,
-            control,
-            value,
-        } => Some([0x0B, 0xB0 | (channel & 0x0F), control, value]),
-        MidiMessage::ProgramChange { channel, program } => {
-            Some([0x0C, 0xC0 | (channel & 0x0F), program, 0x00])
-        }
-        MidiMessage::PitchBend { channel, value } => {
-            let u = (value + 8192) as u16;
-            Some([
-                0x0E,
-                0xE0 | (channel & 0x0F),
-                (u & 0x7F) as u8,
-                ((u >> 7) & 0x7F) as u8,
-            ])
-        }
-        MidiMessage::ActiveSensing => Some([0x0F, 0xFE, 0x00, 0x00]),
-        MidiMessage::TimingClock => Some([0x0F, 0xF8, 0x00, 0x00]),
-    }
-}
-
-fn usb_packet_to_message(packet: [u8; 4]) -> Option<MidiMessage> {
-    let cin = packet[0] & 0x0F;
-    let status = packet[1];
-    let d1 = packet[2];
-    let d2 = packet[3];
-    let channel = status & 0x0F;
-
-    match cin {
-        0x08 => Some(MidiMessage::NoteOff {
-            channel,
-            note: d1,
-            velocity: d2,
-        }),
-        0x09 => {
-            if d2 == 0 {
-                Some(MidiMessage::NoteOff {
-                    channel,
-                    note: d1,
-                    velocity: 0,
-                })
-            } else {
-                Some(MidiMessage::NoteOn {
-                    channel,
-                    note: d1,
-                    velocity: d2,
-                })
-            }
-        }
-        0x0B => Some(MidiMessage::ControlChange {
-            channel,
-            control: d1,
-            value: d2,
-        }),
-        0x0C => Some(MidiMessage::ProgramChange {
-            channel,
-            program: d1,
-        }),
-        0x0E => {
-            let raw = (d1 as u16) | ((d2 as u16) << 7);
-            Some(MidiMessage::PitchBend {
-                channel,
-                value: raw as i16 - 8192,
-            })
-        }
-        0x0F => match status {
-            0xF8 => Some(MidiMessage::TimingClock),
-            0xFE => Some(MidiMessage::ActiveSensing),
-            _ => None,
-        },
-        _ => None,
     }
 }

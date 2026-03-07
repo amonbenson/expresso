@@ -6,7 +6,7 @@ pub use usb::{UsbMidiDecoder, UsbMidiEncoder};
 
 #[cfg(feature = "embassy")]
 mod embassy_impl {
-    use super::traits::PacketSink;
+    use super::super::traits::PacketSink;
     use embassy_sync::blocking_mutex::raw::RawMutex;
     use embassy_sync::channel::Sender;
 
@@ -18,7 +18,7 @@ mod embassy_impl {
         type Packet = T;
         type Error = embassy_sync::channel::TrySendError<T>;
 
-        fn try_send(&mut self, packet: T) -> Result<(), Self::Error> {
+        fn emit(&mut self, packet: T) -> Result<(), Self::Error> {
             Sender::try_send(self, packet)
         }
     }

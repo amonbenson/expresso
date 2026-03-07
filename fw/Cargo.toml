@@ -4,6 +4,8 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+expresso = { path = "../expresso", features = ["embassy"] }
+
 embassy-stm32 = { version = "0.5.0", features = [
     "defmt",
     "stm32g431cb",

@@ -1,43 +1,68 @@
-use defmt::{info, warn};
+use defmt::warn;
 use embassy_futures::select::{Either3, select3};
+use expresso::component::Component;
+use expresso::midi::types::MidiEndpoint;
+use expresso::midi::{MidiMessage, MidiMessageSink};
+use expresso::router::Router;
+use expresso::settings::Settings;
 
-use crate::midi::{MidiMessageReceiver, MidiMessageSender};
+use crate::{MsgReceiver, MsgSender};
 
-enum MidiSource {
-    Usb,
-    Din,
-    Exp,
+// Routes decoded messages to the appropriate output channel based on the
+// target endpoint chosen by the library's Router component.
+struct RouterSink {
+    to_usb: MsgSender,
+    to_din: MsgSender,
+}
+
+impl MidiMessageSink for RouterSink {
+    fn emit(&mut self, message: MidiMessage<'_>, target: Option<MidiEndpoint>) {
+        let Some(msg) = crate::to_static(message) else {
+            return;
+        };
+        match target {
+            Some(MidiEndpoint::Usb) => {
+                if self.to_usb.try_send(msg).is_err() {
+                    warn!("Router: USB output full, message dropped");
+                }
+            }
+            Some(MidiEndpoint::Din) => {
+                if self.to_din.try_send(msg).is_err() {
+                    warn!("Router: DIN output full, message dropped");
+                }
+            }
+            _ => {}
+        }
+    }
 }
 
 #[embassy_executor::task]
 pub async fn task(
-    usb_midi_in: MidiMessageReceiver<'static>,
-    din_midi_in: MidiMessageReceiver<'static>,
-    exp_midi_in: MidiMessageReceiver<'static>,
-    usb_midi_out: MidiMessageSender<'static>,
-    din_midi_out: MidiMessageSender<'static>,
+    from_usb: MsgReceiver,
+    from_din: MsgReceiver,
+    from_exp: MsgReceiver,
+    to_usb: MsgSender,
+    to_din: MsgSender,
 ) {
-    info!("Router task started (loopback: USB in -> USB out)");
+    let mut router = Router::new();
+    let mut settings = Settings::<4>::default();
+    let mut sink = RouterSink { to_usb, to_din };
 
     loop {
-        let (source, message) = match select3(
-            usb_midi_in.receive(),
-            din_midi_in.receive(),
-            exp_midi_in.receive(),
+        let (message, source) = match select3(
+            from_usb.receive(),
+            from_din.receive(),
+            from_exp.receive(),
         )
         .await
         {
-            Either3::First(message) => (MidiSource::Usb, message),
-            Either3::Second(message) => (MidiSource::Din, message),
-            Either3::Third(message) => (MidiSource::Exp, message),
+            Either3::First(m) => (m, MidiEndpoint::Usb),
+            Either3::Second(m) => (m, MidiEndpoint::Din),
+            Either3::Third(m) => (m, MidiEndpoint::Expression),
         };
 
-        // full Loopback: send any message from any source to all outputs
-        if usb_midi_out.try_send(message).is_err() {
-            warn!("Router: USB output channel full, message dropped");
-        }
-        if din_midi_out.try_send(message).is_err() {
-            warn!("Router: DIN output channel full, message dropped");
-        }
+        router
+            .handle_message(message, source, &mut sink, &mut settings)
+            .unwrap();
     }
 }
