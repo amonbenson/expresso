@@ -81,7 +81,12 @@ mod tests {
 
     impl MidiMessageSink for MessageCollector {
         fn emit(&mut self, message: MidiMessage, _target: Option<MidiEndpoint>) {
-            if let MidiMessage::ControlChange { channel, control, value } = message {
+            if let MidiMessage::ControlChange {
+                channel,
+                control,
+                value,
+            } = message
+            {
                 self.messages[self.count] = (channel, control, value);
                 self.count += 1;
             }
@@ -111,7 +116,10 @@ mod tests {
             .unwrap();
         assert_eq!(sink.count, 4);
         for i in 0..4 {
-            assert_eq!(sink.messages[i].0, i as u8, "channel {i} wrong MIDI channel");
+            assert_eq!(
+                sink.messages[i].0, i as u8,
+                "channel {i} wrong MIDI channel"
+            );
         }
     }
 

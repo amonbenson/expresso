@@ -1,5 +1,5 @@
 use super::super::traits::{MidiDecoder, MidiEncoder, PacketSink};
-use super::super::types::MidiMessage;
+use super::super::types::{DecodeResult, MidiMessage};
 
 // ---- USB MIDI Encoder ----
 
@@ -8,7 +8,7 @@ pub struct UsbMidiEncoder;
 impl MidiEncoder for UsbMidiEncoder {
     type Packet = [u8; 4];
 
-    fn emit<S>(&mut self, message: &MidiMessage<'_>, sink: &mut S) -> Result<(), S::Error>
+    fn emit<S>(&mut self, message: &MidiMessage, sink: &mut S) -> Result<(), S::Error>
     where
         S: PacketSink<Packet = [u8; 4]>,
     {
@@ -40,22 +40,31 @@ impl MidiEncoder for UsbMidiEncoder {
                     ((u >> 7) & 0x7F) as u8,
                 ])?;
             }
-            MidiMessage::Sysex(data) => {
-                let mut i = 0;
-                while i < data.len() {
-                    let remaining = data.len() - i;
-                    let packet = match remaining {
-                        1 => [0x05, data[i], 0x00, 0x00],
-                        2 => [0x06, data[i], data[i + 1], 0x00],
-                        r if r >= 3 && i + 3 >= data.len() => {
-                            [0x07, data[i], data[i + 1], data[i + 2]]
-                        }
-                        _ => [0x04, data[i], data[i + 1], data[i + 2]],
-                    };
-                    sink.emit(packet)?;
-                    i += 3;
+        }
+        Ok(())
+    }
+}
+
+impl UsbMidiEncoder {
+    /// Encode a raw SysEx payload (must include leading 0xF0 and trailing 0xF7)
+    /// into USB MIDI packets and emit them to `sink`.
+    pub fn emit_sysex<S>(&mut self, payload: &[u8], sink: &mut S) -> Result<(), S::Error>
+    where
+        S: PacketSink<Packet = [u8; 4]>,
+    {
+        let mut i = 0;
+        while i < payload.len() {
+            let remaining = payload.len() - i;
+            let packet = match remaining {
+                1 => [0x05, payload[i], 0x00, 0x00],
+                2 => [0x06, payload[i], payload[i + 1], 0x00],
+                r if r >= 3 && i + 3 >= payload.len() => {
+                    [0x07, payload[i], payload[i + 1], payload[i + 2]]
                 }
-            }
+                _ => [0x04, payload[i], payload[i + 1], payload[i + 2]],
+            };
+            sink.emit(packet)?;
+            i += 3;
         }
         Ok(())
     }
@@ -89,7 +98,7 @@ impl<const SYSEX_N: usize> UsbMidiDecoder<SYSEX_N> {
 impl<const SYSEX_N: usize> MidiDecoder for UsbMidiDecoder<SYSEX_N> {
     type Packet = [u8; 4];
 
-    fn feed(&mut self, packet: [u8; 4]) -> Option<MidiMessage<'_>> {
+    fn feed(&mut self, packet: [u8; 4]) -> Option<DecodeResult<'_>> {
         let cin = packet[0] & 0x0F;
         let status = packet[1];
         let d1 = packet[2];
@@ -112,14 +121,14 @@ impl<const SYSEX_N: usize> MidiDecoder for UsbMidiDecoder<SYSEX_N> {
                 self.in_sysex = false;
                 let len = self.sysex_len;
                 self.sysex_len = 0;
-                Some(MidiMessage::Sysex(&self.sysex_buf[..len]))
+                Some(DecodeResult::Sysex(&self.sysex_buf[..len]))
             }
-            0x08 => Some(MidiMessage::NoteOff {
+            0x08 => Some(DecodeResult::Message(MidiMessage::NoteOff {
                 channel,
                 note: d1,
                 velocity: d2,
-            }),
-            0x09 => Some(if d2 == 0 {
+            })),
+            0x09 => Some(DecodeResult::Message(if d2 == 0 {
                 MidiMessage::NoteOff {
                     channel,
                     note: d1,
@@ -131,22 +140,22 @@ impl<const SYSEX_N: usize> MidiDecoder for UsbMidiDecoder<SYSEX_N> {
                     note: d1,
                     velocity: d2,
                 }
-            }),
-            0x0B => Some(MidiMessage::ControlChange {
+            })),
+            0x0B => Some(DecodeResult::Message(MidiMessage::ControlChange {
                 channel,
                 control: d1,
                 value: d2,
-            }),
-            0x0C => Some(MidiMessage::ProgramChange {
+            })),
+            0x0C => Some(DecodeResult::Message(MidiMessage::ProgramChange {
                 channel,
                 program: d1,
-            }),
+            })),
             0x0E => {
                 let raw = (d1 as u16) | ((d2 as u16) << 7);
-                Some(MidiMessage::PitchBend {
+                Some(DecodeResult::Message(MidiMessage::PitchBend {
                     channel,
                     value: raw as i16 - 8192,
-                })
+                }))
             }
             _ => None,
         }
@@ -206,10 +215,17 @@ mod tests {
     mod usb_encoder {
         use super::*;
 
-        fn encode(message: &MidiMessage<'_>) -> CollectSink<[u8; 4], 16> {
+        fn encode(message: &MidiMessage) -> CollectSink<[u8; 4], 16> {
             let mut encoder = UsbMidiEncoder;
             let mut sink = CollectSink::new();
             encoder.emit(message, &mut sink).unwrap();
+            sink
+        }
+
+        fn encode_sysex(payload: &[u8]) -> CollectSink<[u8; 4], 16> {
+            let mut encoder = UsbMidiEncoder;
+            let mut sink = CollectSink::new();
+            encoder.emit_sysex(payload, &mut sink).unwrap();
             sink
         }
 
@@ -310,7 +326,7 @@ mod tests {
         fn sysex_single_packet() {
             // F0 + 1 data byte + F7 = 3 bytes, fits in one CIN 0x07 end packet
             let data = [0xF0, 0x41, 0xF7];
-            let sink = encode(&MidiMessage::Sysex(&data));
+            let sink = encode_sysex(&data);
             assert_eq!(sink.len(), 1);
             assert_eq!(sink.get(0)[0] & 0x0F, 0x07);
         }
@@ -319,7 +335,7 @@ mod tests {
         fn sysex_multiple_packets() {
             // F0 + 6 data bytes + F7 = 8 bytes total
             let data = [0xF0, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0xF7];
-            let sink = encode(&MidiMessage::Sysex(&data));
+            let sink = encode_sysex(&data);
             assert_eq!(sink.len(), 3);
             assert_eq!(sink.get(0)[0] & 0x0F, 0x04);
             assert_eq!(sink.get(1)[0] & 0x0F, 0x04);
@@ -328,9 +344,9 @@ mod tests {
 
         #[test]
         fn sysex_end_1_byte() {
-            // F0 + 2 data bytes + F7 = 4 bytes; first chunk is CIN 0x04, last chunk is F7 alone (CIN 0x05)
+            // F0 + 2 data bytes + F7 = 4 bytes; first CIN 0x04, last F7 alone (CIN 0x05)
             let data = [0xF0, 0x41, 0x10, 0xF7];
-            let sink = encode(&MidiMessage::Sysex(&data));
+            let sink = encode_sysex(&data);
             let last = sink.get(sink.len() - 1);
             assert_eq!(last[0] & 0x0F, 0x05);
         }
@@ -339,44 +355,11 @@ mod tests {
     mod usb_decoder {
         use super::*;
 
-        fn decode(packet: [u8; 4]) -> Option<MidiMessage<'static>> {
+        fn decode(packet: [u8; 4]) -> Option<MidiMessage> {
             let mut decoder = UsbMidiDecoder::<0>::new();
             match decoder.feed(packet) {
-                Some(MidiMessage::NoteOn {
-                    channel,
-                    note,
-                    velocity,
-                }) => Some(MidiMessage::NoteOn {
-                    channel,
-                    note,
-                    velocity,
-                }),
-                Some(MidiMessage::NoteOff {
-                    channel,
-                    note,
-                    velocity,
-                }) => Some(MidiMessage::NoteOff {
-                    channel,
-                    note,
-                    velocity,
-                }),
-                Some(MidiMessage::ControlChange {
-                    channel,
-                    control,
-                    value,
-                }) => Some(MidiMessage::ControlChange {
-                    channel,
-                    control,
-                    value,
-                }),
-                Some(MidiMessage::ProgramChange { channel, program }) => {
-                    Some(MidiMessage::ProgramChange { channel, program })
-                }
-                Some(MidiMessage::PitchBend { channel, value }) => {
-                    Some(MidiMessage::PitchBend { channel, value })
-                }
-                Some(MidiMessage::Sysex(_)) => panic!("unexpected sysex"),
-                None => None,
+                Some(DecodeResult::Message(msg)) => Some(msg),
+                _ => None,
             }
         }
 
@@ -480,7 +463,7 @@ mod tests {
             let mut decoder = UsbMidiDecoder::<64>::new();
             let result = decoder.feed([0x07, 0xF0, 0x41, 0xF7]);
             match result {
-                Some(MidiMessage::Sysex(data)) => assert_eq!(data, &[0xF0, 0x41, 0xF7]),
+                Some(DecodeResult::Sysex(data)) => assert_eq!(data, &[0xF0, 0x41, 0xF7]),
                 _ => panic!("expected sysex"),
             }
         }
@@ -492,7 +475,7 @@ mod tests {
             assert!(decoder.feed([0x04, 0x03, 0x04, 0x05]).is_none());
             let result = decoder.feed([0x06, 0x06, 0xF7, 0x00]);
             match result {
-                Some(MidiMessage::Sysex(data)) => {
+                Some(DecodeResult::Sysex(data)) => {
                     assert_eq!(data, &[0xF0, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0xF7]);
                 }
                 _ => panic!("expected sysex"),
@@ -505,14 +488,17 @@ mod tests {
             assert!(decoder.feed([0x04, 0xF0, 0x01, 0x02]).is_none());
             decoder.reset();
             let result = decoder.feed([0x09, 0x90, 60, 100]);
-            assert!(matches!(result, Some(MidiMessage::NoteOn { .. })));
+            assert!(matches!(
+                result,
+                Some(DecodeResult::Message(MidiMessage::NoteOn { .. }))
+            ));
         }
     }
 
     mod usb_roundtrip {
         use super::*;
 
-        fn roundtrip(message: &MidiMessage<'_>) -> Option<MidiMessage<'static>> {
+        fn roundtrip(message: &MidiMessage) -> Option<MidiMessage> {
             let mut encoder = UsbMidiEncoder;
             let mut sink = CollectSink::<[u8; 4], 16>::new();
             encoder.emit(message, &mut sink).unwrap();
@@ -521,43 +507,8 @@ mod tests {
             let mut result = None;
             for i in 0..sink.len() {
                 if let Some(packet) = sink.buf[i] {
-                    if let Some(msg) = decoder.feed(packet) {
-                        result = Some(match msg {
-                            MidiMessage::NoteOn {
-                                channel,
-                                note,
-                                velocity,
-                            } => MidiMessage::NoteOn {
-                                channel,
-                                note,
-                                velocity,
-                            },
-                            MidiMessage::NoteOff {
-                                channel,
-                                note,
-                                velocity,
-                            } => MidiMessage::NoteOff {
-                                channel,
-                                note,
-                                velocity,
-                            },
-                            MidiMessage::ControlChange {
-                                channel,
-                                control,
-                                value,
-                            } => MidiMessage::ControlChange {
-                                channel,
-                                control,
-                                value,
-                            },
-                            MidiMessage::ProgramChange { channel, program } => {
-                                MidiMessage::ProgramChange { channel, program }
-                            }
-                            MidiMessage::PitchBend { channel, value } => {
-                                MidiMessage::PitchBend { channel, value }
-                            }
-                            MidiMessage::Sysex(_) => panic!("use sysex_roundtrip"),
-                        });
+                    if let Some(DecodeResult::Message(msg)) = decoder.feed(packet) {
+                        result = Some(msg);
                     }
                 }
             }
@@ -571,9 +522,8 @@ mod tests {
                 note: 64,
                 velocity: 80,
             };
-            let result = roundtrip(&msg).unwrap();
             assert!(matches!(
-                result,
+                roundtrip(&msg).unwrap(),
                 MidiMessage::NoteOn {
                     channel: 3,
                     note: 64,
@@ -589,9 +539,8 @@ mod tests {
                 note: 48,
                 velocity: 0,
             };
-            let result = roundtrip(&msg).unwrap();
             assert!(matches!(
-                result,
+                roundtrip(&msg).unwrap(),
                 MidiMessage::NoteOff {
                     channel: 1,
                     note: 48,
@@ -607,9 +556,8 @@ mod tests {
                 control: 74,
                 value: 64,
             };
-            let result = roundtrip(&msg).unwrap();
             assert!(matches!(
-                result,
+                roundtrip(&msg).unwrap(),
                 MidiMessage::ControlChange {
                     channel: 0,
                     control: 74,
@@ -624,9 +572,8 @@ mod tests {
                 channel: 2,
                 program: 10,
             };
-            let result = roundtrip(&msg).unwrap();
             assert!(matches!(
-                result,
+                roundtrip(&msg).unwrap(),
                 MidiMessage::ProgramChange {
                     channel: 2,
                     program: 10
@@ -640,9 +587,8 @@ mod tests {
                 channel: 0,
                 value: 0,
             };
-            let result = roundtrip(&msg).unwrap();
             assert!(matches!(
-                result,
+                roundtrip(&msg).unwrap(),
                 MidiMessage::PitchBend {
                     channel: 0,
                     value: 0
@@ -656,9 +602,8 @@ mod tests {
                 channel: 0,
                 value: 8191,
             };
-            let result = roundtrip(&msg).unwrap();
             assert!(matches!(
-                result,
+                roundtrip(&msg).unwrap(),
                 MidiMessage::PitchBend {
                     channel: 0,
                     value: 8191
@@ -672,9 +617,8 @@ mod tests {
                 channel: 0,
                 value: -8192,
             };
-            let result = roundtrip(&msg).unwrap();
             assert!(matches!(
-                result,
+                roundtrip(&msg).unwrap(),
                 MidiMessage::PitchBend {
                     channel: 0,
                     value: -8192
@@ -685,16 +629,15 @@ mod tests {
         #[test]
         fn sysex_roundtrip() {
             let data = [0xF0, 0x41, 0x10, 0x42, 0x12, 0x01, 0x02, 0x03, 0xF7];
-            let msg = MidiMessage::Sysex(&data);
 
             let mut encoder = UsbMidiEncoder;
             let mut sink = CollectSink::<[u8; 4], 16>::new();
-            encoder.emit(&msg, &mut sink).unwrap();
+            encoder.emit_sysex(&data, &mut sink).unwrap();
 
             let mut decoder = UsbMidiDecoder::<64>::new();
             for i in 0..sink.len() {
                 if let Some(packet) = sink.buf[i] {
-                    if let Some(MidiMessage::Sysex(decoded)) = decoder.feed(packet) {
+                    if let Some(DecodeResult::Sysex(decoded)) = decoder.feed(packet) {
                         assert_eq!(decoded, &data);
                         return;
                     }

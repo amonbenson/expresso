@@ -14,18 +14,15 @@ struct RouterSink {
 }
 
 impl MidiMessageSink for RouterSink {
-    fn emit(&mut self, message: MidiMessage<'_>, target: Option<MidiEndpoint>) {
-        let Some(msg) = message.to_static() else {
-            return;
-        };
+    fn emit(&mut self, message: MidiMessage, target: Option<MidiEndpoint>) {
         match target {
             Some(MidiEndpoint::Usb) => {
-                if self.to_usb.try_send(msg).is_err() {
+                if self.to_usb.try_send(message).is_err() {
                     warn!("Router: USB output full, message dropped");
                 }
             }
             Some(MidiEndpoint::Din) => {
-                if self.to_din.try_send(msg).is_err() {
+                if self.to_din.try_send(message).is_err() {
                     warn!("Router: DIN output full, message dropped");
                 }
             }

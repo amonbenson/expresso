@@ -15,10 +15,8 @@ const ADC_MAX: f32 = 4095.0;
 struct ExpSink(InMsgSender);
 
 impl MidiMessageSink for ExpSink {
-    fn emit(&mut self, message: MidiMessage<'_>, _target: Option<MidiEndpoint>) {
-        if let Some(msg) = message.to_static() {
-            let _ = self.0.try_send((msg, MidiEndpoint::Expression));
-        }
+    fn emit(&mut self, message: MidiMessage, _target: Option<MidiEndpoint>) {
+        let _ = self.0.try_send((message, MidiEndpoint::Expression));
     }
 }
 

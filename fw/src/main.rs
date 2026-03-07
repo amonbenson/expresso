@@ -89,6 +89,7 @@ async fn main(spawner: Spawner) {
             midi_class,
             ROUTER_TO_USB.receiver(),
             TO_ROUTER.sender(),
+            settings,
         ))
         .unwrap();
 

@@ -1,13 +1,13 @@
 use super::super::traits::{MidiDecoder, MidiEncoder, PacketSink};
-use super::super::types::MidiMessage;
+use super::super::types::{DecodeResult, MidiMessage};
 
 // ---- DIN MIDI Encoder ----
 
 pub struct DinMidiEncoder;
 
 impl DinMidiEncoder {
-    /// DIN MIDI is a byte stream, so we emit raw bytes rather than fixed packets.
-    pub fn emit_bytes<S>(&mut self, message: &MidiMessage<'_>, sink: &mut S) -> Result<(), S::Error>
+    /// Encode a channel message as raw DIN MIDI bytes and emit them to `sink`.
+    pub fn emit_bytes<S>(&mut self, message: &MidiMessage, sink: &mut S) -> Result<(), S::Error>
     where
         S: PacketSink<Packet = u8>,
     {
@@ -49,11 +49,18 @@ impl DinMidiEncoder {
                 sink.emit((u & 0x7F) as u8)?;
                 sink.emit(((u >> 7) & 0x7F) as u8)?;
             }
-            MidiMessage::Sysex(data) => {
-                for &b in *data {
-                    sink.emit(b)?;
-                }
-            }
+        }
+        Ok(())
+    }
+
+    /// Encode a raw SysEx payload (must include leading 0xF0 and trailing 0xF7)
+    /// as raw DIN MIDI bytes and emit them to `sink`.
+    pub fn emit_sysex_bytes<S>(&mut self, payload: &[u8], sink: &mut S) -> Result<(), S::Error>
+    where
+        S: PacketSink<Packet = u8>,
+    {
+        for &b in payload {
+            sink.emit(b)?;
         }
         Ok(())
     }
@@ -62,7 +69,7 @@ impl DinMidiEncoder {
 impl MidiEncoder for DinMidiEncoder {
     type Packet = u8;
 
-    fn emit<S>(&mut self, message: &MidiMessage<'_>, sink: &mut S) -> Result<(), S::Error>
+    fn emit<S>(&mut self, message: &MidiMessage, sink: &mut S) -> Result<(), S::Error>
     where
         S: PacketSink<Packet = u8>,
     {
@@ -100,7 +107,7 @@ impl<const SYSEX_N: usize> DinMidiDecoder<SYSEX_N> {
         }
     }
 
-    fn try_complete(&mut self) -> Option<MidiMessage<'_>> {
+    fn try_complete(&mut self) -> Option<MidiMessage> {
         let command = self.status & 0xF0;
         let channel = self.status & 0x0F;
 
@@ -161,7 +168,7 @@ impl<const SYSEX_N: usize> DinMidiDecoder<SYSEX_N> {
 impl<const SYSEX_N: usize> MidiDecoder for DinMidiDecoder<SYSEX_N> {
     type Packet = u8;
 
-    fn feed(&mut self, byte: u8) -> Option<MidiMessage<'_>> {
+    fn feed(&mut self, byte: u8) -> Option<DecodeResult<'_>> {
         if byte & 0x80 != 0 {
             if byte == 0xF0 {
                 self.in_sysex = true;
@@ -174,7 +181,7 @@ impl<const SYSEX_N: usize> MidiDecoder for DinMidiDecoder<SYSEX_N> {
                 self.in_sysex = false;
                 let len = self.sysex_len;
                 self.sysex_len = 0;
-                return Some(MidiMessage::Sysex(&self.sysex_buf[..len]));
+                return Some(DecodeResult::Sysex(&self.sysex_buf[..len]));
             }
             self.in_sysex = false;
             self.status = byte;
@@ -193,7 +200,7 @@ impl<const SYSEX_N: usize> MidiDecoder for DinMidiDecoder<SYSEX_N> {
 
         self.data[self.count as usize] = byte;
         self.count += 1;
-        self.try_complete()
+        self.try_complete().map(DecodeResult::Message)
     }
 
     fn reset(&mut self) {
@@ -249,10 +256,37 @@ mod tests {
         }
     }
 
+    // Feed all bytes and return the result of the last one.
+    fn feed_all<'d, const N: usize>(
+        decoder: &'d mut DinMidiDecoder<N>,
+        bytes: &[u8],
+    ) -> Option<DecodeResult<'d>> {
+        match bytes.split_last() {
+            None => None,
+            Some((last, rest)) => {
+                for &b in rest {
+                    decoder.feed(b);
+                }
+                decoder.feed(*last)
+            }
+        }
+    }
+
+    // Convenience: feed bytes and return the channel message, panicking on sysex.
+    fn feed_message<const N: usize>(
+        decoder: &mut DinMidiDecoder<N>,
+        bytes: &[u8],
+    ) -> Option<MidiMessage> {
+        match feed_all(decoder, bytes)? {
+            DecodeResult::Message(msg) => Some(msg),
+            DecodeResult::Sysex(_) => panic!("expected channel message, got sysex"),
+        }
+    }
+
     mod din_encoder {
         use super::*;
 
-        fn encode(message: &MidiMessage<'_>) -> CollectSink<u8, 16> {
+        fn encode(message: &MidiMessage) -> CollectSink<u8, 16> {
             let mut encoder = DinMidiEncoder;
             let mut sink = CollectSink::new();
             encoder.emit_bytes(message, &mut sink).unwrap();
@@ -334,7 +368,9 @@ mod tests {
         #[test]
         fn sysex() {
             let data = [0xF0, 0x41, 0x10, 0xF7];
-            let sink = encode(&MidiMessage::Sysex(&data));
+            let mut encoder = DinMidiEncoder;
+            let mut sink = CollectSink::<u8, 16>::new();
+            encoder.emit_sysex_bytes(&data, &mut sink).unwrap();
             assert_eq!(sink.len(), 4);
             assert_eq!(sink.get(0), 0xF0);
             assert_eq!(sink.get(1), 0x41);
@@ -346,27 +382,15 @@ mod tests {
     mod din_decoder {
         use super::*;
 
-        fn feed_all<'d, const N: usize>(
-            decoder: &'d mut DinMidiDecoder<N>,
-            bytes: &[u8],
-        ) -> Option<MidiMessage<'d>> {
-            match bytes.split_last() {
-                None => None,
-                Some((last, rest)) => {
-                    for &b in rest {
-                        decoder.feed(b);
-                    }
-                    decoder.feed(*last)
-                }
-            }
-        }
-
         #[test]
         fn note_on() {
             let mut decoder = DinMidiDecoder::<0>::new();
             assert!(decoder.feed(0x90).is_none());
             assert!(decoder.feed(60).is_none());
-            let msg = decoder.feed(100).unwrap();
+            let msg = match decoder.feed(100) {
+                Some(DecodeResult::Message(m)) => m,
+                _ => panic!("expected channel message"),
+            };
             assert!(matches!(
                 msg,
                 MidiMessage::NoteOn {
@@ -380,7 +404,7 @@ mod tests {
         #[test]
         fn note_on_velocity_zero_becomes_note_off() {
             let mut decoder = DinMidiDecoder::<0>::new();
-            let msg = feed_all(&mut decoder, &[0x90, 60, 0]).unwrap();
+            let msg = feed_message(&mut decoder, &[0x90, 60, 0]).unwrap();
             assert!(matches!(
                 msg,
                 MidiMessage::NoteOff {
@@ -394,7 +418,7 @@ mod tests {
         #[test]
         fn note_off() {
             let mut decoder = DinMidiDecoder::<0>::new();
-            let msg = feed_all(&mut decoder, &[0x83, 48, 64]).unwrap();
+            let msg = feed_message(&mut decoder, &[0x83, 48, 64]).unwrap();
             assert!(matches!(
                 msg,
                 MidiMessage::NoteOff {
@@ -408,7 +432,7 @@ mod tests {
         #[test]
         fn control_change() {
             let mut decoder = DinMidiDecoder::<0>::new();
-            let msg = feed_all(&mut decoder, &[0xB2, 7, 127]).unwrap();
+            let msg = feed_message(&mut decoder, &[0xB2, 7, 127]).unwrap();
             assert!(matches!(
                 msg,
                 MidiMessage::ControlChange {
@@ -422,7 +446,7 @@ mod tests {
         #[test]
         fn program_change() {
             let mut decoder = DinMidiDecoder::<0>::new();
-            let msg = feed_all(&mut decoder, &[0xC0, 42]).unwrap();
+            let msg = feed_message(&mut decoder, &[0xC0, 42]).unwrap();
             assert!(matches!(
                 msg,
                 MidiMessage::ProgramChange {
@@ -435,7 +459,7 @@ mod tests {
         #[test]
         fn pitch_bend_center() {
             let mut decoder = DinMidiDecoder::<0>::new();
-            let msg = feed_all(&mut decoder, &[0xE0, 0x00, 0x40]).unwrap();
+            let msg = feed_message(&mut decoder, &[0xE0, 0x00, 0x40]).unwrap();
             assert!(matches!(
                 msg,
                 MidiMessage::PitchBend {
@@ -448,7 +472,7 @@ mod tests {
         #[test]
         fn pitch_bend_min() {
             let mut decoder = DinMidiDecoder::<0>::new();
-            let msg = feed_all(&mut decoder, &[0xE0, 0x00, 0x00]).unwrap();
+            let msg = feed_message(&mut decoder, &[0xE0, 0x00, 0x00]).unwrap();
             assert!(matches!(
                 msg,
                 MidiMessage::PitchBend {
@@ -461,7 +485,7 @@ mod tests {
         #[test]
         fn pitch_bend_max() {
             let mut decoder = DinMidiDecoder::<0>::new();
-            let msg = feed_all(&mut decoder, &[0xE0, 0x7F, 0x7F]).unwrap();
+            let msg = feed_message(&mut decoder, &[0xE0, 0x7F, 0x7F]).unwrap();
             assert!(matches!(
                 msg,
                 MidiMessage::PitchBend {
@@ -474,7 +498,7 @@ mod tests {
         #[test]
         fn running_status() {
             let mut decoder = DinMidiDecoder::<0>::new();
-            let msg1 = feed_all(&mut decoder, &[0x90, 60, 100]).unwrap();
+            let msg1 = feed_message(&mut decoder, &[0x90, 60, 100]).unwrap();
             assert!(matches!(
                 msg1,
                 MidiMessage::NoteOn {
@@ -483,7 +507,7 @@ mod tests {
                     ..
                 }
             ));
-            let msg2 = feed_all(&mut decoder, &[64, 80]).unwrap();
+            let msg2 = feed_message(&mut decoder, &[64, 80]).unwrap();
             assert!(matches!(
                 msg2,
                 MidiMessage::NoteOn {
@@ -499,7 +523,7 @@ mod tests {
             let mut decoder = DinMidiDecoder::<0>::new();
             assert!(decoder.feed(0x60).is_none());
             assert!(decoder.feed(0x40).is_none());
-            let msg = feed_all(&mut decoder, &[0x90, 60, 100]).unwrap();
+            let msg = feed_message(&mut decoder, &[0x90, 60, 100]).unwrap();
             assert!(matches!(msg, MidiMessage::NoteOn { .. }));
         }
 
@@ -509,7 +533,7 @@ mod tests {
             assert!(decoder.feed(0x90).is_none());
             assert!(decoder.feed(60).is_none());
             assert!(decoder.feed(0x80).is_none());
-            let msg = feed_all(&mut decoder, &[48, 64]).unwrap();
+            let msg = feed_message(&mut decoder, &[48, 64]).unwrap();
             assert!(matches!(
                 msg,
                 MidiMessage::NoteOff {
@@ -524,9 +548,8 @@ mod tests {
         fn sysex() {
             let mut decoder = DinMidiDecoder::<64>::new();
             let data = [0xF0, 0x41, 0x10, 0x42, 0xF7];
-            let msg = feed_all(&mut decoder, &data).unwrap();
-            match msg {
-                MidiMessage::Sysex(decoded) => assert_eq!(decoded, &data),
+            match feed_all(&mut decoder, &data).unwrap() {
+                DecodeResult::Sysex(decoded) => assert_eq!(decoded, &data),
                 _ => panic!("expected sysex"),
             }
         }
@@ -535,7 +558,7 @@ mod tests {
         fn sysex_then_normal_message() {
             let mut decoder = DinMidiDecoder::<64>::new();
             feed_all(&mut decoder, &[0xF0, 0x01, 0x02, 0xF7]);
-            let msg = feed_all(&mut decoder, &[0x90, 60, 100]).unwrap();
+            let msg = feed_message(&mut decoder, &[0x90, 60, 100]).unwrap();
             assert!(matches!(msg, MidiMessage::NoteOn { .. }));
         }
 
@@ -557,32 +580,26 @@ mod tests {
         #[test]
         fn multiple_messages_sequential() {
             let mut decoder = DinMidiDecoder::<0>::new();
-            {
-                let msg = feed_all(&mut decoder, &[0x90, 60, 100]).unwrap();
-                assert!(matches!(msg, MidiMessage::NoteOn { note: 60, .. }));
-            }
-            {
-                let msg = feed_all(&mut decoder, &[0x80, 60, 0]).unwrap();
-                assert!(matches!(msg, MidiMessage::NoteOff { note: 60, .. }));
-            }
-            {
-                let msg = feed_all(&mut decoder, &[0xB0, 7, 64]).unwrap();
-                assert!(matches!(
-                    msg,
-                    MidiMessage::ControlChange {
-                        control: 7,
-                        value: 64,
-                        ..
-                    }
-                ));
-            }
+            let msg1 = feed_message(&mut decoder, &[0x90, 60, 100]).unwrap();
+            assert!(matches!(msg1, MidiMessage::NoteOn { note: 60, .. }));
+            let msg2 = feed_message(&mut decoder, &[0x80, 60, 0]).unwrap();
+            assert!(matches!(msg2, MidiMessage::NoteOff { note: 60, .. }));
+            let msg3 = feed_message(&mut decoder, &[0xB0, 7, 64]).unwrap();
+            assert!(matches!(
+                msg3,
+                MidiMessage::ControlChange {
+                    control: 7,
+                    value: 64,
+                    ..
+                }
+            ));
         }
     }
 
     mod din_roundtrip {
         use super::*;
 
-        fn roundtrip_non_sysex(message: &MidiMessage<'_>) -> Option<MidiMessage<'static>> {
+        fn roundtrip_non_sysex(message: &MidiMessage) -> Option<MidiMessage> {
             let mut encoder = DinMidiEncoder;
             let mut sink = CollectSink::<u8, 16>::new();
             encoder.emit_bytes(message, &mut sink).unwrap();
@@ -591,43 +608,8 @@ mod tests {
             let mut result = None;
             for i in 0..sink.len() {
                 if let Some(byte) = sink.buf[i] {
-                    if let Some(msg) = decoder.feed(byte) {
-                        result = Some(match msg {
-                            MidiMessage::NoteOn {
-                                channel,
-                                note,
-                                velocity,
-                            } => MidiMessage::NoteOn {
-                                channel,
-                                note,
-                                velocity,
-                            },
-                            MidiMessage::NoteOff {
-                                channel,
-                                note,
-                                velocity,
-                            } => MidiMessage::NoteOff {
-                                channel,
-                                note,
-                                velocity,
-                            },
-                            MidiMessage::ControlChange {
-                                channel,
-                                control,
-                                value,
-                            } => MidiMessage::ControlChange {
-                                channel,
-                                control,
-                                value,
-                            },
-                            MidiMessage::ProgramChange { channel, program } => {
-                                MidiMessage::ProgramChange { channel, program }
-                            }
-                            MidiMessage::PitchBend { channel, value } => {
-                                MidiMessage::PitchBend { channel, value }
-                            }
-                            MidiMessage::Sysex(_) => panic!("unexpected sysex"),
-                        });
+                    if let Some(DecodeResult::Message(msg)) = decoder.feed(byte) {
+                        result = Some(msg);
                     }
                 }
             }
@@ -641,9 +623,8 @@ mod tests {
                 note: 60,
                 velocity: 100,
             };
-            let result = roundtrip_non_sysex(&msg).unwrap();
             assert!(matches!(
-                result,
+                roundtrip_non_sysex(&msg).unwrap(),
                 MidiMessage::NoteOn {
                     channel: 0,
                     note: 60,
@@ -659,9 +640,8 @@ mod tests {
                 note: 48,
                 velocity: 64,
             };
-            let result = roundtrip_non_sysex(&msg).unwrap();
             assert!(matches!(
-                result,
+                roundtrip_non_sysex(&msg).unwrap(),
                 MidiMessage::NoteOff {
                     channel: 1,
                     note: 48,
@@ -677,9 +657,8 @@ mod tests {
                 control: 7,
                 value: 127,
             };
-            let result = roundtrip_non_sysex(&msg).unwrap();
             assert!(matches!(
-                result,
+                roundtrip_non_sysex(&msg).unwrap(),
                 MidiMessage::ControlChange {
                     channel: 3,
                     control: 7,
@@ -694,9 +673,8 @@ mod tests {
                 channel: 0,
                 program: 42,
             };
-            let result = roundtrip_non_sysex(&msg).unwrap();
             assert!(matches!(
-                result,
+                roundtrip_non_sysex(&msg).unwrap(),
                 MidiMessage::ProgramChange {
                     channel: 0,
                     program: 42
@@ -719,16 +697,14 @@ mod tests {
         #[test]
         fn sysex_roundtrip() {
             let data = [0xF0, 0x41, 0x10, 0x42, 0x12, 0xF7];
-            let msg = MidiMessage::Sysex(&data);
-
             let mut encoder = DinMidiEncoder;
             let mut sink = CollectSink::<u8, 16>::new();
-            encoder.emit_bytes(&msg, &mut sink).unwrap();
+            encoder.emit_sysex_bytes(&data, &mut sink).unwrap();
 
             let mut decoder = DinMidiDecoder::<64>::new();
             for i in 0..sink.len() {
                 if let Some(byte) = sink.buf[i] {
-                    if let Some(MidiMessage::Sysex(decoded)) = decoder.feed(byte) {
+                    if let Some(DecodeResult::Sysex(decoded)) = decoder.feed(byte) {
                         assert_eq!(decoded, &data);
                         return;
                     }

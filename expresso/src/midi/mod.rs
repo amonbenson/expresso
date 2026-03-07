@@ -10,7 +10,7 @@
 // pub type MidiMessageReceiver<'a> = Receiver<'a, CriticalSectionRawMutex, MidiMessage, CHANNEL_CAP>;
 
 pub mod types;
-pub use types::MidiMessage;
+pub use types::{DecodeResult, MidiMessage};
 
 pub mod traits;
 pub use traits::{MidiDecoder, MidiEncoder, MidiMessageSink, PacketSink};

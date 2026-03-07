@@ -4,7 +4,8 @@ use embassy_stm32::{
     mode::Async,
     usart::{Uart, UartRx, UartTx},
 };
-use expresso::midi::{DinMidiDecoder, DinMidiEncoder, MidiDecoder, MidiEncoder};
+use expresso::midi::types::MidiEndpoint;
+use expresso::midi::{DecodeResult, DinMidiDecoder, DinMidiEncoder, MidiDecoder, MidiEncoder};
 
 use crate::{InMsgSender, MsgReceiver, collector::Collector};
 
@@ -28,14 +29,9 @@ async fn rx_loop(mut rx: UartRx<'static, Async>, to_router: InMsgSender) {
         match rx.read_until_idle(&mut buffer).await {
             Ok(len) => {
                 for &byte in &buffer[..len] {
-                    if let Some(message) = decoder.feed(byte) {
-                        if let Some(message) = message.to_static() {
-                            if to_router
-                                .try_send((message, expresso::midi::types::MidiEndpoint::Din))
-                                .is_err()
-                            {
-                                warn!("DIN MIDI RX: channel full, message dropped");
-                            }
+                    if let Some(DecodeResult::Message(msg)) = decoder.feed(byte) {
+                        if to_router.try_send((msg, MidiEndpoint::Din)).is_err() {
+                            warn!("DIN MIDI RX: channel full, message dropped");
                         }
                     }
                 }
