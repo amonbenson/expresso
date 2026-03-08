@@ -1,17 +1,13 @@
 use crate::settings::Settings;
 use serde::{Deserialize, Serialize};
 
-// Single-byte non-commercial manufacturer ID (MIDI spec 0x7D).
 pub const SYSEX_MFID: u8 = 0x7D;
+pub const SYSEX_MAGIC: [u8; 4] = [0x6F, 0x2E, 0x55, 0x00];
 
-const SYSEX_CMD_VERSION_REQUEST: u8 = 0x01;
-const SYSEX_CMD_VERSION_REPLY: u8 = 0x41;
-
-const SYSEX_CMD_SETTINGS_GET: u8 = 0x02;
-const SYSEX_CMD_SETTINGS_GET_REPLY: u8 = 0x42;
-
-const SYSEX_CMD_SETTINGS_SET: u8 = 0x03;
-const SYSEX_CMD_SETTINGS_SET_REPLY: u8 = 0x43;
+const SYSEX_CMD_VERSION_REQUEST: u8 = 0x00;
+const SYSEX_CMD_SETTINGS_GET: u8 = 0x01;
+const SYSEX_CMD_SETTINGS_SET: u8 = 0x02;
+const SYSEX_CMD_SETTINGS_PATCH: u8 = 0x03;
 
 // Settings: 4 channels × ~51 bytes = ~204 bytes minimum.
 const MAX_SETTINGS_BYTES: usize = 256;
@@ -26,56 +22,59 @@ pub struct SysexResponse {
     pub len: usize,
 }
 
+impl Default for SysexResponse {
+    fn default() -> Self {
+        Self {
+            data: [0; SYSEX_RESPONSE_BUF_SIZE],
+            len: Default::default(),
+        }
+    }
+}
+
 /// Dispatches incoming SysEx messages and produces responses.
 pub struct SysexDispatcher {
     version: (u8, u8, u8),
 }
 
-/// Encode raw bytes into 7-bit-safe MIDI SysEx data.
-///
-/// Every group of up to 7 input bytes is encoded as one MSB-collector byte
-/// followed by those bytes with their MSBs cleared. Returns the number of
-/// bytes written to `dst`.
-fn encode_7bit(src: &[u8], dst: &mut [u8]) -> usize {
-    let mut out = 0;
-    let mut i = 0;
-    while i < src.len() {
-        let group_len = (src.len() - i).min(7);
-        let msb_pos = out;
-        dst[out] = 0;
-        out += 1;
-        for j in 0..group_len {
-            if src[i + j] & 0x80 != 0 {
-                dst[msb_pos] |= 1 << j;
-            }
-            dst[out] = src[i + j] & 0x7F;
+pub mod codec_7bit {
+    pub fn encode(src: &[u8], dst: &mut [u8]) -> usize {
+        let mut out = 0;
+        let mut i = 0;
+        while i < src.len() {
+            let group_len = (src.len() - i).min(7);
+            let msb_pos = out;
+            dst[out] = 0;
             out += 1;
+            for j in 0..group_len {
+                if src[i + j] & 0x80 != 0 {
+                    dst[msb_pos] |= 1 << j;
+                }
+                dst[out] = src[i + j] & 0x7F;
+                out += 1;
+            }
+            i += group_len;
         }
-        i += group_len;
+        out
     }
-    out
-}
 
-/// Decode 7-bit-encoded MIDI SysEx data back to raw bytes.
-///
-/// Returns the number of bytes written, or `None` if `dst` is too small.
-fn decode_7bit(src: &[u8], dst: &mut [u8]) -> Option<usize> {
-    let mut out = 0;
-    let mut i = 0;
-    while i < src.len() {
-        let msb = src[i];
-        i += 1;
-        let group_len = (src.len() - i).min(7);
-        for j in 0..group_len {
-            if out >= dst.len() {
-                return None;
+    pub fn decode(src: &[u8], dst: &mut [u8]) -> Option<usize> {
+        let mut out = 0;
+        let mut i = 0;
+        while i < src.len() {
+            let msb = src[i];
+            i += 1;
+            let group_len = (src.len() - i).min(7);
+            for j in 0..group_len {
+                if out >= dst.len() {
+                    return None;
+                }
+                dst[out] = (src[i + j] & 0x7F) | ((msb >> j & 1) << 7);
+                out += 1;
             }
-            dst[out] = (src[i + j] & 0x7F) | ((msb >> j & 1) << 7);
-            out += 1;
+            i += group_len;
         }
-        i += group_len;
+        Some(out)
     }
-    Some(out)
 }
 
 impl SysexDispatcher {
@@ -85,32 +84,36 @@ impl SysexDispatcher {
         }
     }
 
-    /// Handle a received SysEx payload (must include leading 0xF0 and trailing 0xF7).
-    /// Returns `Some(response)` if a reply should be sent back.
-    pub fn handle(&mut self, payload: &[u8], settings: &mut Settings) -> Option<SysexResponse>
+    pub fn handle(&mut self, req: &[u8], settings: &mut Settings) -> Option<SysexResponse>
     where
         Settings: Serialize + for<'de> Deserialize<'de>,
     {
-        // Minimum: [0xF0, MFID, cmd, 0xF7]
-        if payload.len() < 4 || payload[0] != 0xF0 || payload[1] != SYSEX_MFID {
+        // Check the packet format:
+        // F0 <MFID> <M0> <M1> <M2> <M3> <cmd> ... 7F
+        if req.len() < 8 || req[0] != 0xF0 || req[1] != SYSEX_MFID || req[2..6] != SYSEX_MAGIC {
             return None;
         }
-        match payload[2] {
+
+        // Prepare the response buffer
+        let cmd = req[6];
+        let mut res = SysexResponse::default();
+        res.data[0] = 0xF0;
+        res.data[1] = SYSEX_MFID;
+        res.data[2] = SYSEX_MAGIC[0];
+        res.data[3] = SYSEX_MAGIC[1];
+        res.data[4] = SYSEX_MAGIC[2];
+        res.data[5] = SYSEX_MAGIC[3];
+        res.data[6] = cmd | 0x70; // set the response bit
+
+        match cmd {
             SYSEX_CMD_VERSION_REQUEST => {
                 let (major, minor, patch) = self.version;
-                let mut r = SysexResponse {
-                    data: [0; SYSEX_RESPONSE_BUF_SIZE],
-                    len: 0,
-                };
-                r.data[0] = 0xF0;
-                r.data[1] = SYSEX_MFID;
-                r.data[2] = SYSEX_CMD_VERSION_REPLY;
-                r.data[3] = major;
-                r.data[4] = minor;
-                r.data[5] = patch;
-                r.data[6] = 0xF7;
-                r.len = 7;
-                Some(r)
+                res.data[7] = major;
+                res.data[8] = minor;
+                res.data[9] = patch;
+                res.data[10] = 0xF7;
+                res.len = 11;
+                Some(res)
             }
 
             SYSEX_CMD_SETTINGS_GET => {
@@ -118,37 +121,22 @@ impl SysexDispatcher {
                 let serialized = postcard::to_slice(settings, &mut postcard_buf).ok()?;
                 let serialized_len = serialized.len();
 
-                let mut r = SysexResponse {
-                    data: [0; SYSEX_RESPONSE_BUF_SIZE],
-                    len: 0,
-                };
-                r.data[0] = 0xF0;
-                r.data[1] = SYSEX_MFID;
-                r.data[2] = SYSEX_CMD_SETTINGS_GET_REPLY;
-                // encode_7bit writes into r.data[3..], which has SYSEX_RESPONSE_BUF_SIZE-3 bytes.
-                let encoded_len = encode_7bit(&postcard_buf[..serialized_len], &mut r.data[3..]);
-                r.data[3 + encoded_len] = 0xF7;
-                r.len = 3 + encoded_len + 1;
-                Some(r)
+                let encoded_len =
+                    codec_7bit::encode(&postcard_buf[..serialized_len], &mut res.data[7..]);
+                res.data[7 + encoded_len] = 0xF7;
+                res.len = 7 + encoded_len + 1;
+                Some(res)
             }
 
             SYSEX_CMD_SETTINGS_SET => {
-                // payload: [0xF0, MFID, cmd, <7-bit data>, 0xF7]
-                let data = &payload[3..payload.len() - 1];
+                let data = &req[7..req.len() - 1];
                 let mut postcard_buf = [0u8; MAX_SETTINGS_BYTES];
-                let decoded_len = decode_7bit(data, &mut postcard_buf)?;
+                let decoded_len = codec_7bit::decode(data, &mut postcard_buf)?;
                 *settings = postcard::from_bytes(&postcard_buf[..decoded_len]).ok()?;
 
-                let mut r = SysexResponse {
-                    data: [0; SYSEX_RESPONSE_BUF_SIZE],
-                    len: 0,
-                };
-                r.data[0] = 0xF0;
-                r.data[1] = SYSEX_MFID;
-                r.data[2] = SYSEX_CMD_SETTINGS_SET_REPLY;
-                r.data[3] = 0xF7;
-                r.len = 4;
-                Some(r)
+                res.data[7] = 0xF7;
+                res.len = 8;
+                Some(res)
             }
 
             _ => None,
@@ -163,31 +151,104 @@ mod tests {
 
     #[test]
     fn version_request() {
-        let mut d = SysexDispatcher::new(0, 1, 0);
+        let mut d = SysexDispatcher::new(1, 2, 3);
         let mut s = Settings::default();
-        let r = d.handle(&[0xF0, SYSEX_MFID, SYSEX_CMD_VERSION_REQUEST, 0xF7], &mut s).unwrap();
-        assert_eq!(&r.data[..r.len], &[0xF0, SYSEX_MFID, SYSEX_CMD_VERSION_REPLY, 0, 1, 0, 0xF7]);
+        let r = d
+            .handle(
+                &[
+                    0xF0,
+                    SYSEX_MFID,
+                    SYSEX_MAGIC[0],
+                    SYSEX_MAGIC[1],
+                    SYSEX_MAGIC[2],
+                    SYSEX_MAGIC[3],
+                    SYSEX_CMD_VERSION_REQUEST,
+                    0xF7,
+                ],
+                &mut s,
+            )
+            .unwrap();
+        assert_eq!(
+            &r.data[..r.len],
+            &[
+                0xF0,
+                SYSEX_MFID,
+                SYSEX_MAGIC[0],
+                SYSEX_MAGIC[1],
+                SYSEX_MAGIC[2],
+                SYSEX_MAGIC[3],
+                SYSEX_CMD_VERSION_REQUEST | 0x70,
+                1,
+                2,
+                3,
+                0xF7
+            ]
+        );
     }
 
     #[test]
     fn unknown_command_returns_none() {
         let mut d = SysexDispatcher::new(0, 1, 0);
         let mut s = Settings::default();
-        assert!(d.handle(&[0xF0, SYSEX_MFID, 0xFF, 0xF7], &mut s).is_none());
+        assert!(
+            d.handle(
+                &[
+                    0xF0,
+                    SYSEX_MFID,
+                    SYSEX_MAGIC[0],
+                    SYSEX_MAGIC[1],
+                    SYSEX_MAGIC[2],
+                    SYSEX_MAGIC[3],
+                    0xFF,
+                    0xF7
+                ],
+                &mut s
+            )
+            .is_none()
+        );
     }
 
     #[test]
     fn wrong_mfid_returns_none() {
         let mut d = SysexDispatcher::new(0, 1, 0);
         let mut s = Settings::default();
-        assert!(d.handle(&[0xF0, 0x41, 0x01, 0xF7], &mut s).is_none());
+        assert!(
+            d.handle(
+                &[
+                    0xF0,
+                    0x41,
+                    SYSEX_MAGIC[0],
+                    SYSEX_MAGIC[1],
+                    SYSEX_MAGIC[2],
+                    SYSEX_MAGIC[3],
+                    0x01,
+                    0xF7
+                ],
+                &mut s
+            )
+            .is_none()
+        );
     }
 
     #[test]
     fn too_short_returns_none() {
         let mut d = SysexDispatcher::new(0, 1, 0);
         let mut s = Settings::default();
-        assert!(d.handle(&[0xF0, SYSEX_MFID, 0xF7], &mut s).is_none());
+        assert!(
+            d.handle(
+                &[
+                    0xF0,
+                    SYSEX_MFID,
+                    SYSEX_MAGIC[0],
+                    SYSEX_MAGIC[1],
+                    SYSEX_MAGIC[2],
+                    SYSEX_MAGIC[3],
+                    0xF7
+                ],
+                &mut s
+            )
+            .is_none()
+        );
     }
 
     #[test]
@@ -196,7 +257,7 @@ mod tests {
         let src: [u8; 256] = core::array::from_fn(|i| i as u8);
         // ceil(256/7)*8 = 296 bytes needed for encoded output
         let mut encoded = [0u8; 296];
-        let enc_len = encode_7bit(&src, &mut encoded);
+        let enc_len = codec_7bit::encode(&src, &mut encoded);
 
         // All encoded bytes must be 7-bit safe
         for &b in &encoded[..enc_len] {
@@ -204,7 +265,7 @@ mod tests {
         }
 
         let mut decoded = [0u8; 256];
-        let dec_len = decode_7bit(&encoded[..enc_len], &mut decoded).unwrap();
+        let dec_len = codec_7bit::decode(&encoded[..enc_len], &mut decoded).unwrap();
         assert_eq!(dec_len, src.len());
         assert_eq!(&decoded[..dec_len], &src[..]);
     }
@@ -213,13 +274,31 @@ mod tests {
     fn settings_get_reply_is_7bit_safe() {
         let mut d = SysexDispatcher::new(1, 2, 3);
         let mut s = Settings::default();
-        let r = d.handle(&[0xF0, SYSEX_MFID, SYSEX_CMD_SETTINGS_GET, 0xF7], &mut s).unwrap();
+        let r = d
+            .handle(
+                &[
+                    0xF0,
+                    SYSEX_MFID,
+                    SYSEX_MAGIC[0],
+                    SYSEX_MAGIC[1],
+                    SYSEX_MAGIC[2],
+                    SYSEX_MAGIC[3],
+                    SYSEX_CMD_SETTINGS_GET,
+                    0xF7,
+                ],
+                &mut s,
+            )
+            .unwrap();
         assert_eq!(r.data[0], 0xF0);
         assert_eq!(r.data[1], SYSEX_MFID);
-        assert_eq!(r.data[2], SYSEX_CMD_SETTINGS_GET_REPLY);
+        assert_eq!(r.data[2], SYSEX_MAGIC[0]);
+        assert_eq!(r.data[3], SYSEX_MAGIC[1]);
+        assert_eq!(r.data[4], SYSEX_MAGIC[2]);
+        assert_eq!(r.data[5], SYSEX_MAGIC[3]);
+        assert_eq!(r.data[6], SYSEX_CMD_SETTINGS_GET | 0x70);
         assert_eq!(r.data[r.len - 1], 0xF7);
         // All data bytes between cmd and 0xF7 must be 7-bit safe
-        for &b in &r.data[3..r.len - 1] {
+        for &b in &r.data[7..r.len - 1] {
             assert!(b < 0x80, "data byte {b:#04x} is not 7-bit safe");
         }
     }
@@ -233,19 +312,33 @@ mod tests {
         s.expression.channels[1].cc = 99;
 
         // Get
-        let get_reply = d.handle(&[0xF0, SYSEX_MFID, SYSEX_CMD_SETTINGS_GET, 0xF7], &mut s).unwrap();
-        assert_eq!(get_reply.data[2], SYSEX_CMD_SETTINGS_GET_REPLY);
+        let get_reply = d
+            .handle(
+                &[
+                    0xF0,
+                    SYSEX_MFID,
+                    SYSEX_MAGIC[0],
+                    SYSEX_MAGIC[1],
+                    SYSEX_MAGIC[2],
+                    SYSEX_MAGIC[3],
+                    SYSEX_CMD_SETTINGS_GET,
+                    0xF7,
+                ],
+                &mut s,
+            )
+            .unwrap();
+        assert_eq!(get_reply.data[6], SYSEX_CMD_SETTINGS_GET | 0x70);
 
         // Use the reply payload as a set command: copy into a fixed buffer, swap the cmd byte.
         let mut set_payload = [0u8; SYSEX_RESPONSE_BUF_SIZE];
         set_payload[..get_reply.len].copy_from_slice(&get_reply.data[..get_reply.len]);
-        set_payload[2] = SYSEX_CMD_SETTINGS_SET;
+        set_payload[6] = SYSEX_CMD_SETTINGS_SET;
 
         // Apply to a fresh settings object
         let mut s2 = Settings::default();
         let ack = d.handle(&set_payload[..get_reply.len], &mut s2).unwrap();
-        assert_eq!(ack.data[2], SYSEX_CMD_SETTINGS_SET_REPLY);
-        assert_eq!(ack.len, 4);
+        assert_eq!(ack.data[6], SYSEX_CMD_SETTINGS_SET | 0x70);
+        assert_eq!(ack.len, 8);
 
         assert_eq!(s2.expression.channels[0].cc, 42);
         assert_eq!(s2.expression.channels[1].cc, 99);
