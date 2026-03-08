@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-const LABEL_SIZE: usize = 32;
+use crate::settings::ExpressionChannelSettingsPatch;
 
 #[derive(Default, Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub enum InputMode {
@@ -59,10 +59,12 @@ pub struct InputSettings {
 pub struct ExpressionChannelSettings {
     pub input: InputSettings,
     pub cc: u8,
-    pub label: [u8; LABEL_SIZE],
+    pub label: [u8; Self::LABEL_SIZE],
 }
 
 impl ExpressionChannelSettings {
+    pub const LABEL_SIZE: usize = 32;
+
     pub fn new(index: usize) -> Self {
         Self {
             cc: index as u8,
@@ -80,8 +82,40 @@ impl ExpressionChannelSettings {
             .label
             .iter()
             .position(|&b| b == 0)
-            .unwrap_or(LABEL_SIZE);
+            .unwrap_or(Self::LABEL_SIZE);
         core::str::from_utf8(&self.label[..end]).unwrap_or("")
+    }
+
+    pub fn apply_patch(&mut self, patch: ExpressionChannelSettingsPatch) {
+        match patch {
+            ExpressionChannelSettingsPatch::Label(value) => self.label = value,
+            ExpressionChannelSettingsPatch::CC(value) => self.cc = value,
+            ExpressionChannelSettingsPatch::InputMode(value) => self.input.mode = value,
+            ExpressionChannelSettingsPatch::ContinuousMinimumInput(value) => {
+                self.input.continuous.minimum_input = value
+            }
+            ExpressionChannelSettingsPatch::ContinuousMaximumInput(value) => {
+                self.input.continuous.maximum_input = value
+            }
+            ExpressionChannelSettingsPatch::ContinuousMinimumOutput(value) => {
+                self.input.continuous.minimum_output = value
+            }
+            ExpressionChannelSettingsPatch::ContinuousMaximumOutput(value) => {
+                self.input.continuous.maximum_output = value
+            }
+            ExpressionChannelSettingsPatch::ContinuousDrive(value) => {
+                self.input.continuous.drive = value
+            }
+            ExpressionChannelSettingsPatch::SwitchInvertPolarity(value) => {
+                self.input.switch.invert_polarity = value
+            }
+            ExpressionChannelSettingsPatch::SwitchReleasedValue(value) => {
+                self.input.switch.released_value = value
+            }
+            ExpressionChannelSettingsPatch::SwitchPressedValue(value) => {
+                self.input.switch.pressed_value = value
+            }
+        }
     }
 }
 

@@ -1,4 +1,4 @@
-use crate::settings::Settings;
+use crate::settings::{Settings, SettingsPatch};
 use serde::{Deserialize, Serialize};
 
 pub const SYSEX_MFID: u8 = 0x7D;
@@ -133,6 +133,19 @@ impl SysexDispatcher {
                 let mut postcard_buf = [0u8; MAX_SETTINGS_BYTES];
                 let decoded_len = codec_7bit::decode(data, &mut postcard_buf)?;
                 *settings = postcard::from_bytes(&postcard_buf[..decoded_len]).ok()?;
+
+                res.data[7] = 0xF7;
+                res.len = 8;
+                Some(res)
+            }
+
+            SYSEX_CMD_SETTINGS_PATCH => {
+                let data = &req[7..req.len() - 1];
+                let mut postcard_buf = [0u8; MAX_SETTINGS_BYTES];
+                let decoded_len = codec_7bit::decode(data, &mut postcard_buf)?;
+                let patch: SettingsPatch =
+                    postcard::from_bytes(&postcard_buf[..decoded_len]).ok()?;
+                settings.apply_patch(patch);
 
                 res.data[7] = 0xF7;
                 res.len = 8;
@@ -301,6 +314,43 @@ mod tests {
         for &b in &r.data[7..r.len - 1] {
             assert!(b < 0x80, "data byte {b:#04x} is not 7-bit safe");
         }
+    }
+
+    #[test]
+    fn settings_patch_applies_single_field() {
+        use crate::settings::{ExpressionChannelSettingsPatch, SettingsPatch};
+
+        let mut d = SysexDispatcher::new(1, 0, 0);
+        let mut s = Settings::default();
+        s.expression.channels[0].cc = 10;
+        s.expression.channels[1].cc = 20;
+
+        // Build patch: set channel 0 CC to 77
+        let patch = SettingsPatch::ExpressionChannel(0, ExpressionChannelSettingsPatch::CC(77));
+        let mut postcard_buf = [0u8; MAX_SETTINGS_BYTES];
+        let serialized = postcard::to_slice(&patch, &mut postcard_buf).unwrap();
+        let serialized_len = serialized.len();
+
+        // 7-bit encode into a SysEx frame
+        let mut req = [0u8; SYSEX_RESPONSE_BUF_SIZE];
+        req[0] = 0xF0;
+        req[1] = SYSEX_MFID;
+        req[2] = SYSEX_MAGIC[0];
+        req[3] = SYSEX_MAGIC[1];
+        req[4] = SYSEX_MAGIC[2];
+        req[5] = SYSEX_MAGIC[3];
+        req[6] = SYSEX_CMD_SETTINGS_PATCH;
+        let encoded_len = codec_7bit::encode(&postcard_buf[..serialized_len], &mut req[7..]);
+        req[7 + encoded_len] = 0xF7;
+        let req_len = 7 + encoded_len + 1;
+
+        let ack = d.handle(&req[..req_len], &mut s).unwrap();
+        assert_eq!(ack.data[6], SYSEX_CMD_SETTINGS_PATCH | 0x70);
+        assert_eq!(ack.len, 8);
+
+        // Only channel 0 CC should have changed
+        assert_eq!(s.expression.channels[0].cc, 77);
+        assert_eq!(s.expression.channels[1].cc, 20);
     }
 
     #[test]
