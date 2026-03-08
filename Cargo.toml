@@ -1,9 +1,19 @@
 [workspace]
 resolver = "3"
 members = [
-    "sw/src-tauri",
+    "expresso",
     "fw",
-    "common",
+    "sw/src-tauri",
+    "xtask",
 ]
 
 default-members = ["sw/src-tauri"]
+
+# Firmware needs size optimization even in dev to fit in flash
+[profile.dev.package.expresso-fw]
+opt-level = "z"
+
+[profile.release]
+opt-level = "z"
+debug = 2
+lto = true

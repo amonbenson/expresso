@@ -1,0 +1,14 @@
+[package]
+name = "expresso"
+version = "1.0.0"
+edition = "2024"
+
+[features]
+embassy = ["embassy-sync"]
+
+[dependencies]
+embassy-sync = { version = "0.7.2", optional = true }
+libm = "0.2.16"
+postcard = { version = "1", default-features = false }
+serde = { version = "1", default-features = false, features = ["derive"] }
+snafu = { version = "0.9.0", default-features = false }

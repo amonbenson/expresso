@@ -2468,6 +2468,15 @@
 				(hide yes)
 			)
 		)
+		(property "LCSC" "C14663"
+			(at 242.57 93.9799 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
 		(pin "2"
 			(uuid "5d2143cb-ce52-4a72-bc24-f214b41ac3a3")
 		)
@@ -2925,6 +2934,15 @@
 		)
 		(property "Description" "Positive 60-250mA Low Dropout Regulator, Fixed Output, SOT-23"
 			(at 215.9 88.9 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "LCSC" "C5446"
+			(at 215.9 82.55 0)
 			(effects
 				(font
 					(size 1.27 1.27)

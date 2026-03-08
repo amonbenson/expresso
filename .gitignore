@@ -1,6 +1,12 @@
 /target
 /tmp
 
+<<<<<<< HEAD
+=======
+# AI stuff
+.claude/
+
+>>>>>>> main
 # MacOS stuff
 .DS_Store
 __MACOSX/

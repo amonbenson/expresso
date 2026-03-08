@@ -1,17 +1,12 @@
-# Configuration for embedded target
-[target.thumbv7em-none-eabi]
-runner = "probe-rs run --chip STM32G431CB"
-rustflags = [
-  "-C", "link-arg=-Tlink.x",
-]
+# Firmware commands (STM32 target)
+build-fw = ["run", "-p", "xtask", "--", "build-fw"]
+check-fw = ["check", "-p", "expresso-fw", "--target", "thumbv7em-none-eabihf"]
 
-# Convenient aliases for common operations
-[alias]
-# Firmware commands
-build-fw = "build -p expresso-fw --target thumbv7em-none-eabi"
-check-fw = "check -p expresso-fw --target thumbv7em-none-eabi"
-run-fw = "run -p expresso-fw --target thumbv7em-none-eabi"
-test-fw = "test -p expresso-fw --target thumbv7em-none-eabi"
+# Flash via USB DFU (device must be in DFU mode first: hold BOOT0 high + reset)
+flash-fw = ["run", "-p", "xtask", "--", "flash-fw"]
+
+# Open fw/expresso.ioc in STM32CubeMX (reference only, code generation is not used)
+cubemx = ["run", "-p", "xtask", "--", "cubemx"]
 
 # Desktop software commands
 build-sw = "build -p expresso-sw"
@@ -21,6 +16,3 @@ test-sw = "test -p expresso-sw"
 
 # Check all code
 check-all = "check -p expresso-sw && cargo check -p expresso-fw --target thumbv7em-none-eabi"
-
-[env]
-DEFMT_LOG = "trace"
