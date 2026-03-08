@@ -103,7 +103,7 @@ impl SysexDispatcher {
         res.data[3] = SYSEX_MAGIC[1];
         res.data[4] = SYSEX_MAGIC[2];
         res.data[5] = SYSEX_MAGIC[3];
-        res.data[6] = cmd | 0x70; // set the response bit
+        res.data[6] = cmd | 0x40; // set the response bit
 
         match cmd {
             SYSEX_CMD_VERSION_REQUEST => {
@@ -190,7 +190,7 @@ mod tests {
                 SYSEX_MAGIC[1],
                 SYSEX_MAGIC[2],
                 SYSEX_MAGIC[3],
-                SYSEX_CMD_VERSION_REQUEST | 0x70,
+                SYSEX_CMD_VERSION_REQUEST | 0x40,
                 1,
                 2,
                 3,
@@ -308,7 +308,7 @@ mod tests {
         assert_eq!(r.data[3], SYSEX_MAGIC[1]);
         assert_eq!(r.data[4], SYSEX_MAGIC[2]);
         assert_eq!(r.data[5], SYSEX_MAGIC[3]);
-        assert_eq!(r.data[6], SYSEX_CMD_SETTINGS_GET | 0x70);
+        assert_eq!(r.data[6], SYSEX_CMD_SETTINGS_GET | 0x40);
         assert_eq!(r.data[r.len - 1], 0xF7);
         // All data bytes between cmd and 0xF7 must be 7-bit safe
         for &b in &r.data[7..r.len - 1] {
@@ -345,7 +345,7 @@ mod tests {
         let req_len = 7 + encoded_len + 1;
 
         let ack = d.handle(&req[..req_len], &mut s).unwrap();
-        assert_eq!(ack.data[6], SYSEX_CMD_SETTINGS_PATCH | 0x70);
+        assert_eq!(ack.data[6], SYSEX_CMD_SETTINGS_PATCH | 0x40);
         assert_eq!(ack.len, 8);
 
         // Only channel 0 CC should have changed
@@ -377,7 +377,7 @@ mod tests {
                 &mut s,
             )
             .unwrap();
-        assert_eq!(get_reply.data[6], SYSEX_CMD_SETTINGS_GET | 0x70);
+        assert_eq!(get_reply.data[6], SYSEX_CMD_SETTINGS_GET | 0x40);
 
         // Use the reply payload as a set command: copy into a fixed buffer, swap the cmd byte.
         let mut set_payload = [0u8; SYSEX_RESPONSE_BUF_SIZE];
@@ -387,7 +387,7 @@ mod tests {
         // Apply to a fresh settings object
         let mut s2 = Settings::default();
         let ack = d.handle(&set_payload[..get_reply.len], &mut s2).unwrap();
-        assert_eq!(ack.data[6], SYSEX_CMD_SETTINGS_SET | 0x70);
+        assert_eq!(ack.data[6], SYSEX_CMD_SETTINGS_SET | 0x40);
         assert_eq!(ack.len, 8);
 
         assert_eq!(s2.expression.channels[0].cc, 42);

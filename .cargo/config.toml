@@ -1,3 +1,4 @@
+[alias]
 # Firmware commands (STM32 target)
 build-fw = ["run", "-p", "xtask", "--", "build-fw"]
 check-fw = ["check", "-p", "expresso-fw", "--target", "thumbv7em-none-eabihf"]

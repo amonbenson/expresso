@@ -7,49 +7,49 @@ import ToggleButton from "primevue/togglebutton";
 import { ref, watch } from "vue";
 
 import type {
+  ExpressionChannelSettings,
   ExpressionChannelSettingsPatch,
   InputMode,
   SettingsPatch,
 } from "../types/settings";
+import { labelBytesToString, stringToLabelBytes } from "../types/settings";
 
-const props = defineProps<{ channelIndex: number }>();
+const props = defineProps<{
+  channelIndex: number;
+  settings: ExpressionChannelSettings;
+}>();
 
-// --- State ---
+// ---------------------------------------------------------------------------
+// State — initialised from props.settings (always valid on mount via v-if)
+// ---------------------------------------------------------------------------
 
-const inputMode = ref<InputMode>("Compat");
+const inputMode = ref<InputMode>(props.settings.input.mode);
 
 // Continuous
-const minimumInput = ref(0.0);
-const maximumInput = ref(1.0);
-const minimumOutput = ref<number>(0);
-const maximumOutput = ref<number>(127);
-const drive = ref(0.5);
+const minimumInput = ref(props.settings.input.continuous.minimum_input);
+const maximumInput = ref(props.settings.input.continuous.maximum_input);
+const minimumOutput = ref(props.settings.input.continuous.minimum_output);
+const maximumOutput = ref(props.settings.input.continuous.maximum_output);
+const drive = ref(props.settings.input.continuous.drive);
 
 // Switch
-const invertPolarity = ref(false);
-const releasedValue = ref<number>(0);
-const pressedValue = ref<number>(127);
+const invertPolarity = ref(props.settings.input.switch.invert_polarity);
+const releasedValue = ref(props.settings.input.switch.released_value);
+const pressedValue = ref(props.settings.input.switch.pressed_value);
 
 // Common
-const cc = ref<number>(props.channelIndex);
-const label = ref("");
+const cc = ref(props.settings.cc);
+const label = ref(labelBytesToString(props.settings.label));
 
-// --- Helpers ---
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
 
 const modeOptions = [
   { label: "C", value: "Continuous" },
   { label: "S", value: "Switch" },
   { label: "X", value: "Compat" },
 ];
-
-function labelToBytes(str: string): number[] {
-  const bytes = new Array(32).fill(0);
-  for (let i = 0; i < Math.min(str.length, 32); i++) {
-    bytes[i] = str.charCodeAt(i);
-  }
-
-  return bytes;
-}
 
 async function sendPatch(patch: ExpressionChannelSettingsPatch): Promise<void> {
   const settingsPatch: SettingsPatch = {
@@ -58,21 +58,61 @@ async function sendPatch(patch: ExpressionChannelSettingsPatch): Promise<void> {
   await invoke("patch_settings", { patch: settingsPatch });
 }
 
-// --- Watchers ---
+// ---------------------------------------------------------------------------
+// Watchers — send a patch whenever a value changes
+// ---------------------------------------------------------------------------
 
-watch(inputMode, v => sendPatch({ InputMode: v }));
-watch(cc, v => v != null && sendPatch({ CC: v }));
-watch(label, v => sendPatch({ Label: labelToBytes(v) }));
+watch(inputMode, (v) => {
+  sendPatch({ InputMode: v });
+});
+watch(cc, (v) => {
+  if (v != null) {
+    sendPatch({ CC: v });
+  }
+});
+watch(label, (v) => {
+  sendPatch({ Label: stringToLabelBytes(v) });
+});
 
-watch(minimumInput, v => v != null && sendPatch({ ContinuousMinimumInput: v }));
-watch(maximumInput, v => v != null && sendPatch({ ContinuousMaximumInput: v }));
-watch(minimumOutput, v => v != null && sendPatch({ ContinuousMinimumOutput: v }));
-watch(maximumOutput, v => v != null && sendPatch({ ContinuousMaximumOutput: v }));
-watch(drive, v => v != null && sendPatch({ ContinuousDrive: v }));
+watch(minimumInput, (v) => {
+  if (v != null) {
+    sendPatch({ ContinuousMinimumInput: v });
+  }
+});
+watch(maximumInput, (v) => {
+  if (v != null) {
+    sendPatch({ ContinuousMaximumInput: v });
+  }
+});
+watch(minimumOutput, (v) => {
+  if (v != null) {
+    sendPatch({ ContinuousMinimumOutput: v });
+  }
+});
+watch(maximumOutput, (v) => {
+  if (v != null) {
+    sendPatch({ ContinuousMaximumOutput: v });
+  }
+});
+watch(drive, (v) => {
+  if (v != null) {
+    sendPatch({ ContinuousDrive: v });
+  }
+});
 
-watch(invertPolarity, v => sendPatch({ SwitchInvertPolarity: v }));
-watch(releasedValue, v => v != null && sendPatch({ SwitchReleasedValue: v }));
-watch(pressedValue, v => v != null && sendPatch({ SwitchPressedValue: v }));
+watch(invertPolarity, (v) => {
+  sendPatch({ SwitchInvertPolarity: v });
+});
+watch(releasedValue, (v) => {
+  if (v != null) {
+    sendPatch({ SwitchReleasedValue: v });
+  }
+});
+watch(pressedValue, (v) => {
+  if (v != null) {
+    sendPatch({ SwitchPressedValue: v });
+  }
+});
 </script>
 
 <template>
