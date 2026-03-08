@@ -1,0 +1,13 @@
+@import "tailwindcss";
+@import "tailwindcss-primeui";
+@import "primeicons/primeicons.css";
+
+@theme {
+  --color-surface: var(--p-content-background);
+}
+
+@layer base {
+  html, body, #app {
+    @apply size-full select-none bg-surface;
+  }
+}

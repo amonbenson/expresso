@@ -11,5 +11,12 @@
     "[rust]": {
         "editor.defaultFormatter": "rust-lang.rust-analyzer",
         "editor.formatOnSave": true
+    },
+    "[vue][javascript][javascriptreact][typescript][typescriptreact][html][css]": {
+        "editor.tabSize": 2,
+        "editor.insertSpaces": true
+    },
+    "editor.codeActionsOnSave": {
+        "source.fixAll": "explicit"
     }
 }
