@@ -89,7 +89,7 @@ impl ExpressionChannel {
     }
 }
 
-impl<const C: usize, S> Component<C, S> for ExpressionChannel
+impl<S> Component<S> for ExpressionChannel
 where
     S: MidiMessageSink,
 {
@@ -100,7 +100,7 @@ where
         &mut self,
         inputs: (f32, f32),
         sink: &mut S,
-        settings: &mut Settings<C>,
+        settings: &mut Settings,
     ) -> Result<(), ExpressionChannelError>
     where
         S: MidiMessageSink,
@@ -379,7 +379,7 @@ mod tests {
     #[test]
     fn process_first_call_sends_message() {
         // Initial output is 0; any real pedal position produces a non-zero value -> triggers send
-        let mut settings = Settings::<4>::default();
+        let mut settings = Settings::default();
         let mut sink = MessageCollector::new();
         let mut ch = ExpressionChannel::default();
         ch.process((1.65, 0.275), &mut sink, &mut settings).unwrap();
@@ -388,7 +388,7 @@ mod tests {
 
     #[test]
     fn process_no_message_when_output_unchanged() {
-        let mut settings = Settings::<4>::default();
+        let mut settings = Settings::default();
         let mut sink = MessageCollector::new();
         let mut ch = ExpressionChannel::default();
         ch.process((1.65, 0.275), &mut sink, &mut settings).unwrap();
@@ -402,7 +402,7 @@ mod tests {
 
     #[test]
     fn process_sends_message_when_output_changes() {
-        let mut settings = Settings::<4>::default();
+        let mut settings = Settings::default();
         let mut sink = MessageCollector::new();
         let mut ch = ExpressionChannel::default();
         ch.process((1.65, 0.275), &mut sink, &mut settings).unwrap(); // input ≈ 0.5
@@ -418,7 +418,7 @@ mod tests {
     #[test]
     fn process_message_uses_correct_channel_and_cc() {
         // Channel index 3 -> MIDI channel 3, cc 5
-        let mut settings = Settings::<4>::default();
+        let mut settings = Settings::default();
         settings.expression.channels[3].cc = 5;
         let mut sink = MessageCollector::new();
 
@@ -433,7 +433,7 @@ mod tests {
     #[test]
     fn process_switch_active_on_high_resistance() {
         // r_total ≈ 200k >> R_THRESH=10k -> active -> pressed_value=127
-        let mut settings = Settings::<4>::default();
+        let mut settings = Settings::default();
         settings.expression.channels[0].input.mode = InputMode::Switch;
         let mut sink = MessageCollector::new();
 
@@ -447,7 +447,7 @@ mod tests {
     #[test]
     fn process_switch_inactive_on_zero_resistance() {
         // First make it active, then short the pedal -> output goes to released_value=0
-        let mut settings = Settings::<4>::default();
+        let mut settings = Settings::default();
         settings.expression.channels[0].input.mode = InputMode::Switch;
         let mut sink = MessageCollector::new();
 
@@ -461,7 +461,7 @@ mod tests {
     #[test]
     fn process_uses_updated_cc() {
         // Update CC to 42 before any processing
-        let mut settings = Settings::<4>::default();
+        let mut settings = Settings::default();
         settings.expression.channels[0].cc = 42;
         let mut sink = MessageCollector::new();
         let mut ch = ExpressionChannel::default();

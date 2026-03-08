@@ -15,7 +15,7 @@ impl Router {
     }
 }
 
-impl<const C: usize, S> Component<C, S> for Router
+impl<S> Component<S> for Router
 where
     S: MidiMessageSink,
 {
@@ -27,7 +27,7 @@ where
         message: crate::midi::MidiMessage,
         source: crate::midi::types::MidiEndpoint,
         sink: &mut S,
-        _settings: &mut crate::settings::Settings<C>,
+        _settings: &mut crate::settings::Settings,
     ) -> Result<(), RouterError> {
         // Use Usb and Din in bridge configuration and route Expression messages to the USB interface
         let target = match source {

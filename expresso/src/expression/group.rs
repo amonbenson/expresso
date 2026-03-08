@@ -4,6 +4,7 @@ use snafu::{ResultExt, Snafu};
 
 use super::channel::{ExpressionChannel, ExpressionChannelError};
 use crate::component::Component;
+use crate::config::NUM_CHANNELS;
 use crate::midi::MidiMessageSink;
 
 #[derive(Debug, Snafu)]
@@ -15,11 +16,11 @@ pub enum ExpressionGroupError {
     },
 }
 
-pub struct ExpressionGroup<const C: usize> {
-    channels: [ExpressionChannel; C],
+pub struct ExpressionGroup {
+    channels: [ExpressionChannel; NUM_CHANNELS],
 }
 
-impl<const C: usize> ExpressionGroup<C> {
+impl ExpressionGroup {
     pub fn new() -> Self {
         Self {
             channels: core::array::from_fn(ExpressionChannel::from_index),
@@ -27,18 +28,18 @@ impl<const C: usize> ExpressionGroup<C> {
     }
 }
 
-impl<const C: usize, S> Component<C, S> for ExpressionGroup<C>
+impl<S> Component<S> for ExpressionGroup
 where
     S: MidiMessageSink,
 {
-    type ProcessInputs = [(f32, f32); C];
+    type ProcessInputs = [(f32, f32); NUM_CHANNELS];
     type Error = ExpressionGroupError;
 
     fn process(
         &mut self,
         inputs: Self::ProcessInputs,
         sink: &mut S,
-        settings: &mut crate::settings::Settings<C>,
+        settings: &mut crate::settings::Settings,
     ) -> Result<(), ExpressionGroupError> {
         // Process each channel
         for (channel, input) in zip(self.channels.iter_mut(), inputs) {
@@ -96,9 +97,9 @@ mod tests {
     // All channels process independently: N channels -> up to N messages per call.
     #[test]
     fn all_channels_emit_on_first_call() {
-        let mut group = ExpressionGroup::<4>::new();
+        let mut group = ExpressionGroup::new();
         let mut sink = MessageCollector::new();
-        let mut settings = Settings::<4>::default();
+        let mut settings = Settings::default();
         group
             .process([(1.65, 0.275); 4], &mut sink, &mut settings)
             .unwrap();
@@ -108,9 +109,9 @@ mod tests {
     // Each channel uses its index as the MIDI channel number.
     #[test]
     fn each_channel_uses_correct_midi_channel() {
-        let mut group = ExpressionGroup::<4>::new();
+        let mut group = ExpressionGroup::new();
         let mut sink = MessageCollector::new();
-        let mut settings = Settings::<4>::default();
+        let mut settings = Settings::default();
         group
             .process([(1.65, 0.275); 4], &mut sink, &mut settings)
             .unwrap();
@@ -126,33 +127,35 @@ mod tests {
     // Each channel uses the CC number from settings.
     #[test]
     fn each_channel_uses_correct_cc() {
-        let mut group = ExpressionGroup::<3>::new();
+        let mut group = ExpressionGroup::new();
         let mut sink = MessageCollector::new();
-        let mut settings = Settings::<3>::default();
+        let mut settings = Settings::default();
         settings.expression.channels[0].cc = 10;
         settings.expression.channels[1].cc = 20;
         settings.expression.channels[2].cc = 30;
+        settings.expression.channels[3].cc = 40;
         group
-            .process([(1.65, 0.275); 3], &mut sink, &mut settings)
+            .process([(1.65, 0.275); 4], &mut sink, &mut settings)
             .unwrap();
-        assert_eq!(sink.count, 3);
+        assert_eq!(sink.count, 4);
         // Messages are emitted in channel order (0, 1, 2).
         assert_eq!(sink.messages[0].1, 10, "channel 0 wrong CC");
         assert_eq!(sink.messages[1].1, 20, "channel 1 wrong CC");
         assert_eq!(sink.messages[2].1, 30, "channel 2 wrong CC");
+        assert_eq!(sink.messages[3].1, 40, "channel 3 wrong CC");
     }
 
     // Single-channel group works (const generic edge case).
     #[test]
     fn single_channel_group() {
-        let mut group = ExpressionGroup::<1>::new();
+        let mut group = ExpressionGroup::new();
         let mut sink = MessageCollector::new();
-        let mut settings = Settings::<1>::default();
+        let mut settings = Settings::default();
         settings.expression.channels[0].cc = 7;
         group
-            .process([(1.65, 0.275)], &mut sink, &mut settings)
+            .process([(1.65, 0.275); 4], &mut sink, &mut settings)
             .unwrap();
-        assert_eq!(sink.count, 1);
+        assert_eq!(sink.count, 4);
         let (midi_ch, cc, _) = sink.last();
         assert_eq!(midi_ch, 0);
         assert_eq!(cc, 7);
@@ -161,15 +164,15 @@ mod tests {
     // No messages emitted when all channels repeat the same output.
     #[test]
     fn no_messages_when_all_outputs_unchanged() {
-        let mut group = ExpressionGroup::<2>::new();
+        let mut group = ExpressionGroup::new();
         let mut sink = MessageCollector::new();
-        let mut settings = Settings::<2>::default();
+        let mut settings = Settings::default();
         group
-            .process([(1.65, 0.275); 2], &mut sink, &mut settings)
+            .process([(1.65, 0.275); 4], &mut sink, &mut settings)
             .unwrap();
         let after_first = sink.count;
         group
-            .process([(1.65, 0.275); 2], &mut sink, &mut settings)
+            .process([(1.65, 0.275); 4], &mut sink, &mut settings)
             .unwrap();
         assert_eq!(sink.count, after_first);
     }
@@ -177,17 +180,22 @@ mod tests {
     // Only the changed channel emits a new message, with the correct channel number.
     #[test]
     fn only_changed_channel_emits() {
-        let mut group = ExpressionGroup::<2>::new();
+        let mut group = ExpressionGroup::new();
         let mut sink = MessageCollector::new();
-        let mut settings = Settings::<2>::default();
+        let mut settings = Settings::default();
         group
-            .process([(1.65, 0.275); 2], &mut sink, &mut settings)
+            .process([(1.65, 0.275); 4], &mut sink, &mut settings)
             .unwrap();
         let after_first = sink.count;
-        // Move channel 1 to a very different position; keep channel 0 unchanged.
+        // Move channel 1 to a very different position; keep other channels unchanged.
         group
             .process(
-                [(1.65, 0.275), (143.0 / 120.0, 0.275)],
+                [
+                    (1.65, 0.275),
+                    (143.0 / 120.0, 0.275),
+                    (1.65, 0.275),
+                    (1.65, 0.275),
+                ],
                 &mut sink,
                 &mut settings,
             )

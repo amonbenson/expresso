@@ -15,7 +15,7 @@ pub type InMsgSender = Sender<'static, CriticalSectionRawMutex, InMsg, MSG_CAP>;
 pub type InMsgReceiver = Receiver<'static, CriticalSectionRawMutex, InMsg, MSG_CAP>;
 
 // Shared settings protected by a blocking critical-section mutex.
-pub type SettingsMutex = Mutex<CriticalSectionRawMutex, RefCell<Settings<4>>>;
+pub type SettingsMutex = Mutex<CriticalSectionRawMutex, RefCell<Settings>>;
 
 // Messages routed OUT of the router carry only the payload.
 pub type MsgChannel = Channel<CriticalSectionRawMutex, MidiMessage, MSG_CAP>;

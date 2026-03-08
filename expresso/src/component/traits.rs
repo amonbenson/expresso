@@ -2,7 +2,7 @@ use crate::midi::types::MidiEndpoint;
 use crate::midi::{MidiMessage, MidiMessageSink};
 use crate::settings::Settings;
 
-pub trait Component<const C: usize, S: MidiMessageSink> {
+pub trait Component<S: MidiMessageSink> {
     type ProcessInputs;
     type Error: snafu::Error;
 
@@ -11,7 +11,7 @@ pub trait Component<const C: usize, S: MidiMessageSink> {
         message: MidiMessage,
         source: MidiEndpoint,
         sink: &mut S,
-        settings: &mut Settings<C>,
+        settings: &mut Settings,
     ) -> Result<(), Self::Error> {
         let _ = message;
         let _ = source;
@@ -24,7 +24,7 @@ pub trait Component<const C: usize, S: MidiMessageSink> {
         &mut self,
         inputs: Self::ProcessInputs,
         sink: &mut S,
-        settings: &mut Settings<C>,
+        settings: &mut Settings,
     ) -> Result<(), Self::Error> {
         let _ = inputs;
         let _ = sink;

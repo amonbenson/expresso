@@ -29,7 +29,7 @@ pub async fn task(
     to_router: InMsgSender,
     settings: &'static SettingsMutex,
 ) {
-    let mut group = ExpressionGroup::<4>::new();
+    let mut group = ExpressionGroup::new();
     let mut sink = ExpSink(to_router);
     let interval = Duration::from_hz(EXPRESSION_POLL_HZ);
 

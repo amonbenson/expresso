@@ -11,14 +11,12 @@ const SYSEX_CMD_SETTINGS_GET_REPLY: u8 = 0x04;
 const SYSEX_CMD_SETTINGS_SET: u8 = 0x05;
 const SYSEX_CMD_SETTINGS_SET_ACK: u8 = 0x06;
 
-// Upper bound on the postcard-serialised size of Settings<C> for supported C values.
-// Settings<4>: 4 channels × ~51 bytes = ~204 bytes. 256 gives comfortable headroom.
+// Settings: 4 channels × ~51 bytes = ~204 bytes minimum.
 const MAX_SETTINGS_BYTES: usize = 256;
 
 // Worst-case 7-bit-encoded size of MAX_SETTINGS_BYTES:
 //   ceil(256 / 7) * 8 = 37 * 8 = 296 bytes
-// Plus SysEx framing: 0xF0 + MFID + cmd + <data> + 0xF7 = 3 + 296 + 1 = 300 bytes.
-// 320 gives comfortable headroom.
+// Plus SysEx framing: 0xF0 + MFID + cmd + <data> + 0xF7 = 3 + 296 + 1 = 300 bytes minimum.
 pub const SYSEX_RESPONSE_BUF_SIZE: usize = 320;
 
 pub struct SysexResponse {
@@ -87,13 +85,9 @@ impl SysexDispatcher {
 
     /// Handle a received SysEx payload (must include leading 0xF0 and trailing 0xF7).
     /// Returns `Some(response)` if a reply should be sent back.
-    pub fn handle<const C: usize>(
-        &mut self,
-        payload: &[u8],
-        settings: &mut Settings<C>,
-    ) -> Option<SysexResponse>
+    pub fn handle(&mut self, payload: &[u8], settings: &mut Settings) -> Option<SysexResponse>
     where
-        Settings<C>: Serialize + for<'de> Deserialize<'de>,
+        Settings: Serialize + for<'de> Deserialize<'de>,
     {
         // Minimum: [0xF0, MFID, cmd, 0xF7]
         if payload.len() < 4 || payload[0] != 0xF0 || payload[1] != SYSEX_MFID {
@@ -168,7 +162,7 @@ mod tests {
     #[test]
     fn version_request() {
         let mut d = SysexDispatcher::new(0, 1, 0);
-        let mut s = Settings::<4>::default();
+        let mut s = Settings::default();
         let r = d.handle(&[0xF0, SYSEX_MFID, 0x01, 0xF7], &mut s).unwrap();
         assert_eq!(&r.data[..r.len], &[0xF0, SYSEX_MFID, 0x02, 0, 1, 0, 0xF7]);
     }
@@ -176,21 +170,21 @@ mod tests {
     #[test]
     fn unknown_command_returns_none() {
         let mut d = SysexDispatcher::new(0, 1, 0);
-        let mut s = Settings::<4>::default();
+        let mut s = Settings::default();
         assert!(d.handle(&[0xF0, SYSEX_MFID, 0xFF, 0xF7], &mut s).is_none());
     }
 
     #[test]
     fn wrong_mfid_returns_none() {
         let mut d = SysexDispatcher::new(0, 1, 0);
-        let mut s = Settings::<4>::default();
+        let mut s = Settings::default();
         assert!(d.handle(&[0xF0, 0x41, 0x01, 0xF7], &mut s).is_none());
     }
 
     #[test]
     fn too_short_returns_none() {
         let mut d = SysexDispatcher::new(0, 1, 0);
-        let mut s = Settings::<4>::default();
+        let mut s = Settings::default();
         assert!(d.handle(&[0xF0, SYSEX_MFID, 0xF7], &mut s).is_none());
     }
 
@@ -216,7 +210,7 @@ mod tests {
     #[test]
     fn settings_get_reply_is_7bit_safe() {
         let mut d = SysexDispatcher::new(1, 2, 3);
-        let mut s = Settings::<4>::default();
+        let mut s = Settings::default();
         let r = d.handle(&[0xF0, SYSEX_MFID, 0x03, 0xF7], &mut s).unwrap();
         assert_eq!(r.data[0], 0xF0);
         assert_eq!(r.data[1], SYSEX_MFID);
@@ -231,7 +225,7 @@ mod tests {
     #[test]
     fn settings_get_set_roundtrip() {
         let mut d = SysexDispatcher::new(1, 0, 0);
-        let mut s = Settings::<4>::default();
+        let mut s = Settings::default();
         // Modify fields so the roundtrip is non-trivial
         s.expression.channels[0].cc = 42;
         s.expression.channels[1].cc = 99;
@@ -246,7 +240,7 @@ mod tests {
         set_payload[2] = SYSEX_CMD_SETTINGS_SET;
 
         // Apply to a fresh settings object
-        let mut s2 = Settings::<4>::default();
+        let mut s2 = Settings::default();
         let ack = d.handle(&set_payload[..get_reply.len], &mut s2).unwrap();
         assert_eq!(ack.data[2], SYSEX_CMD_SETTINGS_SET_ACK);
         assert_eq!(ack.len, 4);
