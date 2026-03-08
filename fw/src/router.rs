@@ -1,7 +1,5 @@
 use defmt::warn;
-use expresso::component::Component;
-use expresso::midi::types::MidiEndpoint;
-use expresso::midi::{MidiMessage, MidiMessageSink};
+use expresso::midi::{MidiEndpoint, MidiHandler, MidiMessage, MidiSink};
 use expresso::router::Router;
 
 use crate::{InMsgReceiver, MsgSender, SettingsMutex};
@@ -13,7 +11,7 @@ struct RouterSink {
     to_din: MsgSender,
 }
 
-impl MidiMessageSink for RouterSink {
+impl MidiSink for RouterSink {
     fn emit(&mut self, message: MidiMessage, target: Option<MidiEndpoint>) {
         match target {
             Some(MidiEndpoint::Usb) => {

@@ -7,8 +7,9 @@ use embassy_sync::channel::{Channel, Sender};
 use embassy_usb::Builder;
 use embassy_usb::UsbDevice;
 use embassy_usb::class::midi::MidiClass;
-use expresso::midi::types::MidiEndpoint;
-use expresso::midi::{DecodeResult, MidiDecoder, MidiEncoder, UsbMidiDecoder, UsbMidiEncoder};
+use expresso::midi::{
+    DecodeResult, MidiDecoder, MidiEncoder, MidiEndpoint, UsbMidiDecoder, UsbMidiEncoder,
+};
 use expresso::sysex::{SysexDispatcher, SysexResponse};
 use static_cell::StaticCell;
 
@@ -145,9 +146,8 @@ pub async fn io_task(
                             }
                         }
                         Some(DecodeResult::Sysex(payload)) => {
-                            let response = settings.lock(|s| {
-                                sysex.handle(payload, &mut s.borrow_mut())
-                            });
+                            let response =
+                                settings.lock(|s| sysex.handle(payload, &mut s.borrow_mut()));
                             if let Some(response) = response {
                                 if sysex_tx.try_send(response).is_err() {
                                     warn!("SysEx: response channel full");

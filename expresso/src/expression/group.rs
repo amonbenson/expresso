@@ -3,9 +3,8 @@ use core::iter::zip;
 use snafu::{ResultExt, Snafu};
 
 use super::channel::{ExpressionChannel, ExpressionChannelError};
-use crate::component::Component;
 use crate::config::NUM_CHANNELS;
-use crate::midi::MidiMessageSink;
+use crate::midi::{MidiProcessor, MidiSink};
 
 #[derive(Debug, Snafu)]
 pub enum ExpressionGroupError {
@@ -28,9 +27,9 @@ impl ExpressionGroup {
     }
 }
 
-impl<S> Component<S> for ExpressionGroup
+impl<S> MidiProcessor<S> for ExpressionGroup
 where
-    S: MidiMessageSink,
+    S: MidiSink,
 {
     type ProcessInputs = [(f32, f32); NUM_CHANNELS];
     type Error = ExpressionGroupError;
@@ -56,9 +55,8 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::component::Component;
-    use crate::midi::types::MidiEndpoint;
-    use crate::midi::{MidiMessage, MidiMessageSink};
+    use crate::midi::MidiEndpoint;
+    use crate::midi::{MidiMessage, MidiSink};
     use crate::settings::Settings;
 
     #[derive(Debug)]
@@ -80,7 +78,7 @@ mod tests {
         }
     }
 
-    impl MidiMessageSink for MessageCollector {
+    impl MidiSink for MessageCollector {
         fn emit(&mut self, message: MidiMessage, _target: Option<MidiEndpoint>) {
             if let MidiMessage::ControlChange {
                 channel,

@@ -1,10 +1,8 @@
 use embassy_stm32::adc::{Adc, AnyAdcChannel, BasicAdcRegs, SampleTime};
 use embassy_stm32::peripherals::{ADC1, ADC2};
 use embassy_time::{Duration, Timer};
-use expresso::component::Component;
-use expresso::expression::group::ExpressionGroup;
-use expresso::midi::types::MidiEndpoint;
-use expresso::midi::{MidiMessage, MidiMessageSink};
+use expresso::expression::ExpressionGroup;
+use expresso::midi::{MidiEndpoint, MidiMessage, MidiProcessor, MidiSink};
 
 use crate::{InMsgSender, SettingsMutex, config::EXPRESSION_POLL_HZ};
 
@@ -14,7 +12,7 @@ const ADC_MAX: f32 = 4095.0;
 // Forwards expression CC messages to the TO_ROUTER channel, tagged as Expression.
 struct ExpSink(InMsgSender);
 
-impl MidiMessageSink for ExpSink {
+impl MidiSink for ExpSink {
     fn emit(&mut self, message: MidiMessage, _target: Option<MidiEndpoint>) {
         let _ = self.0.try_send((message, MidiEndpoint::Expression));
     }

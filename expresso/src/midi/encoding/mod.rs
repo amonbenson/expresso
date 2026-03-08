@@ -1,8 +1,8 @@
-pub mod din;
-pub use din::{DinMidiDecoder, DinMidiEncoder};
+mod din;
+pub use din::*;
 
-pub mod usb;
-pub use usb::{UsbMidiDecoder, UsbMidiEncoder};
+mod usb;
+pub use usb::*;
 
 #[cfg(feature = "embassy")]
 mod embassy_impl {

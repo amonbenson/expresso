@@ -2,8 +2,7 @@ use core::cell::RefCell;
 use embassy_sync::blocking_mutex::Mutex;
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::channel::{Channel, Receiver, Sender};
-use expresso::midi::MidiMessage;
-use expresso::midi::types::MidiEndpoint;
+use expresso::midi::{MidiEndpoint, MidiMessage};
 use expresso::settings::Settings;
 
 pub const MSG_CAP: usize = 16;

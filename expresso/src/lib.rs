@@ -1,6 +1,5 @@
 #![no_std]
 
-pub mod component;
 pub mod config;
 pub mod expression;
 pub mod midi;

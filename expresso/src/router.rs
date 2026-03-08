@@ -1,8 +1,6 @@
 use snafu::Snafu;
 
-use crate::component::Component;
-use crate::midi::MidiMessageSink;
-use crate::midi::types::MidiEndpoint;
+use crate::midi::{MidiEndpoint, MidiHandler, MidiSink};
 
 #[derive(Debug, Snafu)]
 pub enum RouterError {}
@@ -15,17 +13,16 @@ impl Router {
     }
 }
 
-impl<S> Component<S> for Router
+impl<S> MidiHandler<S> for Router
 where
-    S: MidiMessageSink,
+    S: MidiSink,
 {
-    type ProcessInputs = ();
     type Error = RouterError;
 
     fn handle_message(
         &mut self,
         message: crate::midi::MidiMessage,
-        source: crate::midi::types::MidiEndpoint,
+        source: crate::midi::MidiEndpoint,
         sink: &mut S,
         _settings: &mut crate::settings::Settings,
     ) -> Result<(), RouterError> {

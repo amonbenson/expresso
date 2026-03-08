@@ -1,8 +1,7 @@
 use libm::{expf, powf, roundf};
 use snafu::Snafu;
 
-use crate::component::Component;
-use crate::midi::{MidiMessage, MidiMessageSink};
+use crate::midi::{MidiProcessor, MidiMessage, MidiSink};
 use crate::settings::{ContinuousSettings, InputMode, Settings, SwitchSettings};
 
 #[derive(Debug, Snafu)]
@@ -89,9 +88,9 @@ impl ExpressionChannel {
     }
 }
 
-impl<S> Component<S> for ExpressionChannel
+impl<S> MidiProcessor<S> for ExpressionChannel
 where
-    S: MidiMessageSink,
+    S: MidiSink,
 {
     type ProcessInputs = (f32, f32);
     type Error = ExpressionChannelError;
@@ -103,7 +102,7 @@ where
         settings: &mut Settings,
     ) -> Result<(), ExpressionChannelError>
     where
-        S: MidiMessageSink,
+        S: MidiSink,
     {
         let settings = settings.expression.channels[self.index];
 
@@ -155,7 +154,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use crate::midi::types::MidiEndpoint;
+    use crate::midi::MidiEndpoint;
     use crate::settings::Settings;
 
     use super::*;
@@ -181,7 +180,7 @@ mod tests {
         }
     }
 
-    impl MidiMessageSink for MessageCollector {
+    impl MidiSink for MessageCollector {
         fn emit(&mut self, message: MidiMessage, _target: Option<MidiEndpoint>) {
             if let MidiMessage::ControlChange {
                 channel,

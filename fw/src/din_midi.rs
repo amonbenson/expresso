@@ -4,8 +4,9 @@ use embassy_stm32::{
     mode::Async,
     usart::{Uart, UartRx, UartTx},
 };
-use expresso::midi::types::MidiEndpoint;
-use expresso::midi::{DecodeResult, DinMidiDecoder, DinMidiEncoder, MidiDecoder, MidiEncoder};
+use expresso::midi::{
+    DecodeResult, DinMidiDecoder, DinMidiEncoder, MidiDecoder, MidiEncoder, MidiEndpoint,
+};
 
 use crate::{InMsgSender, MsgReceiver, collector::Collector};
 
