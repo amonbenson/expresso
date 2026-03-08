@@ -1,6 +1,6 @@
 use crate::settings::Settings;
 
-use super::types::{DecodeResult, MidiEndpoint, MidiMessage};
+use super::{DecodeResult, MidiEndpoint, MidiMessage};
 
 pub trait MidiSink {
     fn emit(&mut self, message: MidiMessage, target: Option<MidiEndpoint>);
@@ -12,7 +12,7 @@ where
 {
     type Error: snafu::Error;
 
-    fn handle_message(
+    fn handle_midi(
         &mut self,
         message: MidiMessage,
         source: MidiEndpoint,
@@ -21,16 +21,16 @@ where
     ) -> Result<(), Self::Error>;
 }
 
-pub trait MidiProcessor<S>
+pub trait MidiGenerator<S>
 where
     S: MidiSink,
 {
-    type ProcessInputs;
+    type Inputs;
     type Error: snafu::Error;
 
-    fn process(
+    fn generate_midi(
         &mut self,
-        inputs: Self::ProcessInputs,
+        inputs: Self::Inputs,
         sink: &mut S,
         settings: &mut Settings,
     ) -> Result<(), Self::Error>;

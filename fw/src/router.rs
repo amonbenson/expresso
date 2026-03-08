@@ -43,7 +43,7 @@ pub async fn task(
         let (message, source) = from.receive().await;
         settings.lock(|s| {
             router
-                .handle_message(message, source, &mut sink, &mut s.borrow_mut())
+                .handle_midi(message, source, &mut sink, &mut s.borrow_mut())
                 .unwrap();
         });
     }

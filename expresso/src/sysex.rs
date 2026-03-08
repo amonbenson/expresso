@@ -5,11 +5,13 @@ use serde::{Deserialize, Serialize};
 pub const SYSEX_MFID: u8 = 0x7D;
 
 const SYSEX_CMD_VERSION_REQUEST: u8 = 0x01;
-const SYSEX_CMD_VERSION_REPLY: u8 = 0x02;
-const SYSEX_CMD_SETTINGS_GET: u8 = 0x03;
-const SYSEX_CMD_SETTINGS_GET_REPLY: u8 = 0x04;
-const SYSEX_CMD_SETTINGS_SET: u8 = 0x05;
-const SYSEX_CMD_SETTINGS_SET_ACK: u8 = 0x06;
+const SYSEX_CMD_VERSION_REPLY: u8 = 0x41;
+
+const SYSEX_CMD_SETTINGS_GET: u8 = 0x02;
+const SYSEX_CMD_SETTINGS_GET_REPLY: u8 = 0x42;
+
+const SYSEX_CMD_SETTINGS_SET: u8 = 0x03;
+const SYSEX_CMD_SETTINGS_SET_REPLY: u8 = 0x43;
 
 // Settings: 4 channels × ~51 bytes = ~204 bytes minimum.
 const MAX_SETTINGS_BYTES: usize = 256;
@@ -143,7 +145,7 @@ impl SysexDispatcher {
                 };
                 r.data[0] = 0xF0;
                 r.data[1] = SYSEX_MFID;
-                r.data[2] = SYSEX_CMD_SETTINGS_SET_ACK;
+                r.data[2] = SYSEX_CMD_SETTINGS_SET_REPLY;
                 r.data[3] = 0xF7;
                 r.len = 4;
                 Some(r)
@@ -163,8 +165,8 @@ mod tests {
     fn version_request() {
         let mut d = SysexDispatcher::new(0, 1, 0);
         let mut s = Settings::default();
-        let r = d.handle(&[0xF0, SYSEX_MFID, 0x01, 0xF7], &mut s).unwrap();
-        assert_eq!(&r.data[..r.len], &[0xF0, SYSEX_MFID, 0x02, 0, 1, 0, 0xF7]);
+        let r = d.handle(&[0xF0, SYSEX_MFID, SYSEX_CMD_VERSION_REQUEST, 0xF7], &mut s).unwrap();
+        assert_eq!(&r.data[..r.len], &[0xF0, SYSEX_MFID, SYSEX_CMD_VERSION_REPLY, 0, 1, 0, 0xF7]);
     }
 
     #[test]
@@ -211,7 +213,7 @@ mod tests {
     fn settings_get_reply_is_7bit_safe() {
         let mut d = SysexDispatcher::new(1, 2, 3);
         let mut s = Settings::default();
-        let r = d.handle(&[0xF0, SYSEX_MFID, 0x03, 0xF7], &mut s).unwrap();
+        let r = d.handle(&[0xF0, SYSEX_MFID, SYSEX_CMD_SETTINGS_GET, 0xF7], &mut s).unwrap();
         assert_eq!(r.data[0], 0xF0);
         assert_eq!(r.data[1], SYSEX_MFID);
         assert_eq!(r.data[2], SYSEX_CMD_SETTINGS_GET_REPLY);
@@ -231,7 +233,7 @@ mod tests {
         s.expression.channels[1].cc = 99;
 
         // Get
-        let get_reply = d.handle(&[0xF0, SYSEX_MFID, 0x03, 0xF7], &mut s).unwrap();
+        let get_reply = d.handle(&[0xF0, SYSEX_MFID, SYSEX_CMD_SETTINGS_GET, 0xF7], &mut s).unwrap();
         assert_eq!(get_reply.data[2], SYSEX_CMD_SETTINGS_GET_REPLY);
 
         // Use the reply payload as a set command: copy into a fixed buffer, swap the cmd byte.
@@ -242,7 +244,7 @@ mod tests {
         // Apply to a fresh settings object
         let mut s2 = Settings::default();
         let ack = d.handle(&set_payload[..get_reply.len], &mut s2).unwrap();
-        assert_eq!(ack.data[2], SYSEX_CMD_SETTINGS_SET_ACK);
+        assert_eq!(ack.data[2], SYSEX_CMD_SETTINGS_SET_REPLY);
         assert_eq!(ack.len, 4);
 
         assert_eq!(s2.expression.channels[0].cc, 42);

@@ -19,7 +19,7 @@ where
 {
     type Error = RouterError;
 
-    fn handle_message(
+    fn handle_midi(
         &mut self,
         message: crate::midi::MidiMessage,
         source: crate::midi::MidiEndpoint,

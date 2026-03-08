@@ -1,7 +1,7 @@
 use libm::{expf, powf, roundf};
 use snafu::Snafu;
 
-use crate::midi::{MidiProcessor, MidiMessage, MidiSink};
+use crate::midi::{MidiGenerator, MidiMessage, MidiSink};
 use crate::settings::{ContinuousSettings, InputMode, Settings, SwitchSettings};
 
 #[derive(Debug, Snafu)]
@@ -88,14 +88,14 @@ impl ExpressionChannel {
     }
 }
 
-impl<S> MidiProcessor<S> for ExpressionChannel
+impl<S> MidiGenerator<S> for ExpressionChannel
 where
     S: MidiSink,
 {
-    type ProcessInputs = (f32, f32);
+    type Inputs = (f32, f32);
     type Error = ExpressionChannelError;
 
-    fn process(
+    fn generate_midi(
         &mut self,
         inputs: (f32, f32),
         sink: &mut S,
@@ -381,7 +381,8 @@ mod tests {
         let mut settings = Settings::default();
         let mut sink = MessageCollector::new();
         let mut ch = ExpressionChannel::default();
-        ch.process((1.65, 0.275), &mut sink, &mut settings).unwrap();
+        ch.generate_midi((1.65, 0.275), &mut sink, &mut settings)
+            .unwrap();
         assert_eq!(sink.count, 1);
     }
 
@@ -390,9 +391,11 @@ mod tests {
         let mut settings = Settings::default();
         let mut sink = MessageCollector::new();
         let mut ch = ExpressionChannel::default();
-        ch.process((1.65, 0.275), &mut sink, &mut settings).unwrap();
+        ch.generate_midi((1.65, 0.275), &mut sink, &mut settings)
+            .unwrap();
         let count = sink.count;
-        ch.process((1.65, 0.275), &mut sink, &mut settings).unwrap(); // same voltages -> same output
+        ch.generate_midi((1.65, 0.275), &mut sink, &mut settings)
+            .unwrap(); // same voltages -> same output
         assert_eq!(
             sink.count, count,
             "Expected no new message on unchanged output"
@@ -404,9 +407,10 @@ mod tests {
         let mut settings = Settings::default();
         let mut sink = MessageCollector::new();
         let mut ch = ExpressionChannel::default();
-        ch.process((1.65, 0.275), &mut sink, &mut settings).unwrap(); // input ≈ 0.5
+        ch.generate_midi((1.65, 0.275), &mut sink, &mut settings)
+            .unwrap(); // input ≈ 0.5
         let count = sink.count;
-        ch.process((143.0 / 120.0, 0.275), &mut sink, &mut settings)
+        ch.generate_midi((143.0 / 120.0, 0.275), &mut sink, &mut settings)
             .unwrap(); // input ≈ 0.8 -> different output
         assert!(
             sink.count > count,
@@ -423,7 +427,8 @@ mod tests {
 
         let mut ch = ExpressionChannel::from_index(3);
 
-        ch.process((1.65, 0.275), &mut sink, &mut settings).unwrap();
+        ch.generate_midi((1.65, 0.275), &mut sink, &mut settings)
+            .unwrap();
         let (midi_ch, cc, _) = sink.messages[0];
         assert_eq!(midi_ch, 3);
         assert_eq!(cc, 5);
@@ -438,7 +443,8 @@ mod tests {
 
         let mut ch = ExpressionChannel::default();
 
-        ch.process((1.65, 0.275), &mut sink, &mut settings).unwrap();
+        ch.generate_midi((1.65, 0.275), &mut sink, &mut settings)
+            .unwrap();
         assert_eq!(sink.count, 1);
         assert_eq!(sink.last().2, 127);
     }
@@ -452,8 +458,10 @@ mod tests {
 
         let mut ch = ExpressionChannel::default();
 
-        ch.process((1.65, 0.275), &mut sink, &mut settings).unwrap(); // active -> 127
-        ch.process((1.65, 1.65), &mut sink, &mut settings).unwrap(); // r_total=0 < threshold -> released -> 0
+        ch.generate_midi((1.65, 0.275), &mut sink, &mut settings)
+            .unwrap(); // active -> 127
+        ch.generate_midi((1.65, 1.65), &mut sink, &mut settings)
+            .unwrap(); // r_total=0 < threshold -> released -> 0
         assert_eq!(sink.last().2, 0);
     }
 
@@ -465,7 +473,8 @@ mod tests {
         let mut sink = MessageCollector::new();
         let mut ch = ExpressionChannel::default();
 
-        ch.process((1.65, 0.275), &mut sink, &mut settings).unwrap();
+        ch.generate_midi((1.65, 0.275), &mut sink, &mut settings)
+            .unwrap();
         assert_eq!(sink.count, 1);
         assert_eq!(
             sink.messages[0].1, 42,

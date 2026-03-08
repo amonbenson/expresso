@@ -1,5 +1,4 @@
-use super::super::traits::{MidiDecoder, MidiEncoder, PacketSink};
-use super::super::types::{DecodeResult, MidiMessage};
+use super::super::{DecodeResult, MidiDecoder, MidiEncoder, MidiMessage, PacketSink};
 
 // ---- DIN MIDI Encoder ----
 

@@ -2,7 +2,7 @@ use embassy_stm32::adc::{Adc, AnyAdcChannel, BasicAdcRegs, SampleTime};
 use embassy_stm32::peripherals::{ADC1, ADC2};
 use embassy_time::{Duration, Timer};
 use expresso::expression::ExpressionGroup;
-use expresso::midi::{MidiEndpoint, MidiMessage, MidiProcessor, MidiSink};
+use expresso::midi::{MidiEndpoint, MidiGenerator, MidiMessage, MidiSink};
 
 use crate::{InMsgSender, SettingsMutex, config::EXPRESSION_POLL_HZ};
 
@@ -40,7 +40,7 @@ pub async fn task(
         ];
 
         settings.lock(|s| {
-            let _ = group.process(inputs, &mut sink, &mut s.borrow_mut());
+            let _ = group.generate_midi(inputs, &mut sink, &mut s.borrow_mut());
         });
 
         Timer::after(interval).await;

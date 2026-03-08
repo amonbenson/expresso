@@ -4,7 +4,7 @@ use snafu::{ResultExt, Snafu};
 
 use super::channel::{ExpressionChannel, ExpressionChannelError};
 use crate::config::NUM_CHANNELS;
-use crate::midi::{MidiProcessor, MidiSink};
+use crate::midi::{MidiGenerator, MidiSink};
 
 #[derive(Debug, Snafu)]
 pub enum ExpressionGroupError {
@@ -27,16 +27,16 @@ impl ExpressionGroup {
     }
 }
 
-impl<S> MidiProcessor<S> for ExpressionGroup
+impl<S> MidiGenerator<S> for ExpressionGroup
 where
     S: MidiSink,
 {
-    type ProcessInputs = [(f32, f32); NUM_CHANNELS];
+    type Inputs = [(f32, f32); NUM_CHANNELS];
     type Error = ExpressionGroupError;
 
-    fn process(
+    fn generate_midi(
         &mut self,
-        inputs: Self::ProcessInputs,
+        inputs: Self::Inputs,
         sink: &mut S,
         settings: &mut crate::settings::Settings,
     ) -> Result<(), ExpressionGroupError> {
@@ -44,7 +44,7 @@ where
         for (channel, input) in zip(self.channels.iter_mut(), inputs) {
             let index = channel.index();
             channel
-                .process(input, sink, settings)
+                .generate_midi(input, sink, settings)
                 .context(ChannelSnafu { index })?;
         }
 
@@ -99,7 +99,7 @@ mod tests {
         let mut sink = MessageCollector::new();
         let mut settings = Settings::default();
         group
-            .process([(1.65, 0.275); 4], &mut sink, &mut settings)
+            .generate_midi([(1.65, 0.275); 4], &mut sink, &mut settings)
             .unwrap();
         assert_eq!(sink.count, 4);
     }
@@ -111,7 +111,7 @@ mod tests {
         let mut sink = MessageCollector::new();
         let mut settings = Settings::default();
         group
-            .process([(1.65, 0.275); 4], &mut sink, &mut settings)
+            .generate_midi([(1.65, 0.275); 4], &mut sink, &mut settings)
             .unwrap();
         assert_eq!(sink.count, 4);
         for i in 0..4 {
@@ -133,7 +133,7 @@ mod tests {
         settings.expression.channels[2].cc = 30;
         settings.expression.channels[3].cc = 40;
         group
-            .process([(1.65, 0.275); 4], &mut sink, &mut settings)
+            .generate_midi([(1.65, 0.275); 4], &mut sink, &mut settings)
             .unwrap();
         assert_eq!(sink.count, 4);
         // Messages are emitted in channel order (0, 1, 2).
@@ -143,22 +143,6 @@ mod tests {
         assert_eq!(sink.messages[3].1, 40, "channel 3 wrong CC");
     }
 
-    // Single-channel group works (const generic edge case).
-    #[test]
-    fn single_channel_group() {
-        let mut group = ExpressionGroup::new();
-        let mut sink = MessageCollector::new();
-        let mut settings = Settings::default();
-        settings.expression.channels[0].cc = 7;
-        group
-            .process([(1.65, 0.275); 4], &mut sink, &mut settings)
-            .unwrap();
-        assert_eq!(sink.count, 4);
-        let (midi_ch, cc, _) = sink.last();
-        assert_eq!(midi_ch, 0);
-        assert_eq!(cc, 7);
-    }
-
     // No messages emitted when all channels repeat the same output.
     #[test]
     fn no_messages_when_all_outputs_unchanged() {
@@ -166,11 +150,11 @@ mod tests {
         let mut sink = MessageCollector::new();
         let mut settings = Settings::default();
         group
-            .process([(1.65, 0.275); 4], &mut sink, &mut settings)
+            .generate_midi([(1.65, 0.275); 4], &mut sink, &mut settings)
             .unwrap();
         let after_first = sink.count;
         group
-            .process([(1.65, 0.275); 4], &mut sink, &mut settings)
+            .generate_midi([(1.65, 0.275); 4], &mut sink, &mut settings)
             .unwrap();
         assert_eq!(sink.count, after_first);
     }
@@ -182,12 +166,12 @@ mod tests {
         let mut sink = MessageCollector::new();
         let mut settings = Settings::default();
         group
-            .process([(1.65, 0.275); 4], &mut sink, &mut settings)
+            .generate_midi([(1.65, 0.275); 4], &mut sink, &mut settings)
             .unwrap();
         let after_first = sink.count;
         // Move channel 1 to a very different position; keep other channels unchanged.
         group
-            .process(
+            .generate_midi(
                 [
                     (1.65, 0.275),
                     (143.0 / 120.0, 0.275),

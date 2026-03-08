@@ -1,7 +1,4 @@
-use super::super::traits::{MidiDecoder, MidiEncoder, PacketSink};
-use super::super::types::{DecodeResult, MidiMessage};
-
-// ---- USB MIDI Encoder ----
+use super::super::{DecodeResult, MidiDecoder, MidiEncoder, MidiMessage, PacketSink};
 
 pub struct UsbMidiEncoder;
 

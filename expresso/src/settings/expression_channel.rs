@@ -55,7 +55,7 @@ pub struct InputSettings {
     pub switch: SwitchSettings,
 }
 
-#[derive(Default, Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Default, Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct ExpressionChannelSettings {
     pub input: InputSettings,
     pub cc: u8,
