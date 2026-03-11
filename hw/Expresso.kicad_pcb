@@ -3,7 +3,7 @@
 	(generator "pcbnew")
 	(generator_version "9.0")
 	(general
-		(thickness 1.6)
+		(thickness 1.96)
 		(legacy_teardrops no)
 	)
 	(paper "A4")
@@ -64,7 +64,7 @@
 			)
 			(layer "dielectric 2"
 				(type "core")
-				(thickness 1.24)
+				(thickness 1.6)
 				(material "FR4")
 				(epsilon_r 4.5)
 				(loss_tangent 0.02)
@@ -94,7 +94,7 @@
 			(layer "B.SilkS"
 				(type "Bottom Silk Screen")
 			)
-			(copper_finish "None")
+			(copper_finish "HAL lead-free")
 			(dielectric_constraints no)
 		)
 		(pad_to_mask_clearance 0)
@@ -371,7 +371,7 @@
 		(path "/d384fc08-7a14-4f66-a318-27ce132b50b2/a3600d74-b3f8-43d8-ba0c-84d986db5879/50178f8e-e6a7-4a6f-9a81-610476b8f7fe")
 		(sheetname "/Expression Inputs/Expression Input 2/")
 		(sheetfile "Expression Input.kicad_sch")
-		(attr exclude_from_pos_files)
+		(attr exclude_from_pos_files exclude_from_bom)
 		(fp_circle
 			(center 0 0)
 			(end 0 1.2)
@@ -604,7 +604,7 @@
 		(path "/7b3e7736-e5d0-49f7-ac58-655fac733912/028357dd-9278-4519-9ca4-dde9f657d0d1")
 		(sheetname "/Power Supply/")
 		(sheetfile "Power_Supply.kicad_sch")
-		(attr exclude_from_pos_files)
+		(attr exclude_from_pos_files exclude_from_bom)
 		(fp_circle
 			(center 0 0)
 			(end 0 1.2)
@@ -838,7 +838,7 @@
 				)
 			)
 		)
-		(property "LCSC" ""
+		(property "LCSC" "C23182"
 			(at 0 0 0)
 			(layer "F.SilkS")
 			(hide yes)
@@ -2731,7 +2731,7 @@
 				)
 			)
 		)
-		(property "LCSC" ""
+		(property "LCSC" "C23182"
 			(at 0 0 0)
 			(layer "F.SilkS")
 			(hide yes)
@@ -3294,7 +3294,7 @@
 		(path "/d384fc08-7a14-4f66-a318-27ce132b50b2/51359ecc-89cc-4b20-884e-91a1e6f3fb83/50178f8e-e6a7-4a6f-9a81-610476b8f7fe")
 		(sheetname "/Expression Inputs/Expression Input 4/")
 		(sheetfile "Expression Input.kicad_sch")
-		(attr exclude_from_pos_files)
+		(attr exclude_from_pos_files exclude_from_bom)
 		(fp_circle
 			(center 0 0)
 			(end 0 1.2)
@@ -6745,7 +6745,7 @@
 		(path "/d384fc08-7a14-4f66-a318-27ce132b50b2/51359ecc-89cc-4b20-884e-91a1e6f3fb83/3c7052a8-5694-446f-bf74-a7e172762a69")
 		(sheetname "/Expression Inputs/Expression Input 4/")
 		(sheetfile "Expression Input.kicad_sch")
-		(attr through_hole)
+		(attr through_hole exclude_from_pos_files exclude_from_bom)
 		(fp_line
 			(start 17.17 -1.105)
 			(end 14.35 -1.105)
@@ -10769,6 +10769,18 @@
 				)
 			)
 		)
+		(property "LCSC" "C25803"
+			(at 0 0 0)
+			(layer "F.SilkS")
+			(hide yes)
+			(uuid "78fe4414-2f30-43bc-88a0-27c19bcfda7b")
+			(effects
+				(font
+					(size 1.27 1.27)
+					(thickness 0.15)
+				)
+			)
+		)
 		(property ki_fp_filters "R_*")
 		(path "/d384fc08-7a14-4f66-a318-27ce132b50b2/b6e017ae-1f83-4869-8b21-85f0180b03f1/240b902d-33c4-4408-a44e-4d8a54f57eae")
 		(sheetname "/Expression Inputs/Expression Input 3/")
@@ -11300,6 +11312,18 @@
 			(layer "F.Fab")
 			(hide yes)
 			(uuid "082e499c-d7d0-4840-9560-04ba429269b8")
+			(effects
+				(font
+					(size 1.27 1.27)
+					(thickness 0.15)
+				)
+			)
+		)
+		(property "LCSC" "C25803"
+			(at 0 0 0)
+			(layer "F.SilkS")
+			(hide yes)
+			(uuid "2a345437-a9e0-4df5-95cd-977d89117f1f")
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -12290,6 +12314,18 @@
 				)
 			)
 		)
+		(property "LCSC" "C25803"
+			(at 0 0 0)
+			(layer "F.SilkS")
+			(hide yes)
+			(uuid "687b0869-e995-4b16-8099-92728aefc84b")
+			(effects
+				(font
+					(size 1.27 1.27)
+					(thickness 0.15)
+				)
+			)
+		)
 		(property ki_fp_filters "R_*")
 		(path "/d384fc08-7a14-4f66-a318-27ce132b50b2/b6e017ae-1f83-4869-8b21-85f0180b03f1/50986407-30f7-40f7-8b7d-db7b0403881a")
 		(sheetname "/Expression Inputs/Expression Input 3/")
@@ -12829,7 +12865,7 @@
 		(path "/d384fc08-7a14-4f66-a318-27ce132b50b2/1f44e9ce-7aaf-4951-a40b-c817e4d0a4c7/76d4b924-3964-4797-943d-3ab00657924e")
 		(sheetname "/Expression Inputs/Expression Input 1/")
 		(sheetfile "Expression Input.kicad_sch")
-		(attr exclude_from_pos_files)
+		(attr exclude_from_pos_files exclude_from_bom)
 		(fp_circle
 			(center 0 0)
 			(end 0 1.2)
@@ -13508,7 +13544,7 @@
 		(path "/34c120ac-b858-4db5-a321-c834b6bac892/aea469ab-3348-4faf-b01f-083b904b4bce")
 		(sheetname "/Microcontroller/")
 		(sheetfile "Microcontroller.kicad_sch")
-		(attr through_hole exclude_from_pos_files)
+		(attr through_hole exclude_from_pos_files exclude_from_bom)
 		(fp_line
 			(start 6.75 3)
 			(end 6.75 1.5)
@@ -14252,7 +14288,7 @@
 		(path "/d384fc08-7a14-4f66-a318-27ce132b50b2/b6e017ae-1f83-4869-8b21-85f0180b03f1/76d4b924-3964-4797-943d-3ab00657924e")
 		(sheetname "/Expression Inputs/Expression Input 3/")
 		(sheetfile "Expression Input.kicad_sch")
-		(attr exclude_from_pos_files)
+		(attr exclude_from_pos_files exclude_from_bom)
 		(fp_circle
 			(center 0 0)
 			(end 0 1.2)
@@ -14601,7 +14637,7 @@
 		(path "/34c120ac-b858-4db5-a321-c834b6bac892/8f477dd7-4c25-4cae-998c-8f4e73130ce9")
 		(sheetname "/Microcontroller/")
 		(sheetfile "Microcontroller.kicad_sch")
-		(attr through_hole exclude_from_pos_files)
+		(attr through_hole exclude_from_pos_files exclude_from_bom)
 		(fp_line
 			(start 6.75 3)
 			(end 6.75 1.5)
@@ -16689,7 +16725,7 @@
 		(path "/d384fc08-7a14-4f66-a318-27ce132b50b2/a3600d74-b3f8-43d8-ba0c-84d986db5879/76d4b924-3964-4797-943d-3ab00657924e")
 		(sheetname "/Expression Inputs/Expression Input 2/")
 		(sheetfile "Expression Input.kicad_sch")
-		(attr exclude_from_pos_files)
+		(attr exclude_from_pos_files exclude_from_bom)
 		(fp_circle
 			(center 0 0)
 			(end 0 1.2)
@@ -16908,6 +16944,18 @@
 			(layer "F.Fab")
 			(hide yes)
 			(uuid "d5801879-42d4-418e-ae2c-b2d1c6488fce")
+			(effects
+				(font
+					(size 1.27 1.27)
+					(thickness 0.15)
+				)
+			)
+		)
+		(property "LCSC" "C25803"
+			(at 0 0 0)
+			(layer "F.SilkS")
+			(hide yes)
+			(uuid "d69c111e-a7ed-48dc-b903-45161cb264af")
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -17191,7 +17239,7 @@
 		(path "/7b3e7736-e5d0-49f7-ac58-655fac733912/38b96919-a46a-46fb-8ba1-02f551600ad0")
 		(sheetname "/Power Supply/")
 		(sheetfile "Power_Supply.kicad_sch")
-		(attr exclude_from_pos_files)
+		(attr exclude_from_pos_files exclude_from_bom)
 		(fp_circle
 			(center 0 0)
 			(end 0 1.2)
@@ -18793,7 +18841,7 @@
 		(path "/d384fc08-7a14-4f66-a318-27ce132b50b2/1f44e9ce-7aaf-4951-a40b-c817e4d0a4c7/50178f8e-e6a7-4a6f-9a81-610476b8f7fe")
 		(sheetname "/Expression Inputs/Expression Input 1/")
 		(sheetfile "Expression Input.kicad_sch")
-		(attr exclude_from_pos_files)
+		(attr exclude_from_pos_files exclude_from_bom)
 		(fp_circle
 			(center 0 0)
 			(end 0 1.2)
@@ -19580,7 +19628,7 @@
 		(path "/75dde623-5f53-41fa-821e-5c4efda934b7/88189a82-7c40-479a-bfaa-1c318b4fb79f")
 		(sheetname "/Midi Connector/")
 		(sheetfile "Midi Connector.kicad_sch")
-		(attr exclude_from_pos_files)
+		(attr exclude_from_pos_files exclude_from_bom)
 		(fp_circle
 			(center 0 0)
 			(end 0 1.2)
@@ -21170,7 +21218,7 @@
 		(path "/d384fc08-7a14-4f66-a318-27ce132b50b2/b6e017ae-1f83-4869-8b21-85f0180b03f1/3c7052a8-5694-446f-bf74-a7e172762a69")
 		(sheetname "/Expression Inputs/Expression Input 3/")
 		(sheetfile "Expression Input.kicad_sch")
-		(attr through_hole)
+		(attr through_hole exclude_from_pos_files exclude_from_bom)
 		(fp_line
 			(start 17.17 -1.105)
 			(end 14.35 -1.105)
@@ -21861,7 +21909,7 @@
 		(path "/75dde623-5f53-41fa-821e-5c4efda934b7/d49086eb-9449-4c00-b181-78ff5ea43380")
 		(sheetname "/Midi Connector/")
 		(sheetfile "Midi Connector.kicad_sch")
-		(attr through_hole exclude_from_pos_files)
+		(attr through_hole exclude_from_pos_files exclude_from_bom)
 		(fp_line
 			(start -3 -9)
 			(end -1.5 -9)
@@ -22650,7 +22698,7 @@
 		(path "/d4ed7994-03ad-4a31-a74f-09823c14a3f6/e4bd9171-4071-4edf-a52a-a449fe894cef")
 		(sheetname "/Debug Connector/")
 		(sheetfile "Debug_Connector.kicad_sch")
-		(attr through_hole exclude_from_pos_files)
+		(attr through_hole exclude_from_pos_files exclude_from_bom)
 		(fp_line
 			(start -1.38 -1.38)
 			(end 0 -1.38)
@@ -25217,7 +25265,7 @@
 		(path "/7b3e7736-e5d0-49f7-ac58-655fac733912/d8481b92-3562-4245-888b-8dd4498dfd7b")
 		(sheetname "/Power Supply/")
 		(sheetfile "Power_Supply.kicad_sch")
-		(attr exclude_from_pos_files)
+		(attr exclude_from_pos_files exclude_from_bom)
 		(fp_circle
 			(center 0 0)
 			(end 0 1.2)
@@ -26678,7 +26726,7 @@
 		(path "/d384fc08-7a14-4f66-a318-27ce132b50b2/51359ecc-89cc-4b20-884e-91a1e6f3fb83/76d4b924-3964-4797-943d-3ab00657924e")
 		(sheetname "/Expression Inputs/Expression Input 4/")
 		(sheetfile "Expression Input.kicad_sch")
-		(attr exclude_from_pos_files)
+		(attr exclude_from_pos_files exclude_from_bom)
 		(fp_circle
 			(center 0 0)
 			(end 0 1.2)
@@ -28833,7 +28881,7 @@
 		(path "/7b3e7736-e5d0-49f7-ac58-655fac733912/7fe31950-cbae-434c-be1f-b9cedb7a89a6")
 		(sheetname "/Power Supply/")
 		(sheetfile "Power_Supply.kicad_sch")
-		(attr exclude_from_pos_files)
+		(attr exclude_from_pos_files exclude_from_bom)
 		(fp_circle
 			(center 0 0)
 			(end 0 1.2)
@@ -29790,7 +29838,7 @@
 		(path "/7b3e7736-e5d0-49f7-ac58-655fac733912/be5dc870-3f41-4df2-af48-12f9d2e6f0d7")
 		(sheetname "/Power Supply/")
 		(sheetfile "Power_Supply.kicad_sch")
-		(attr exclude_from_pos_files)
+		(attr exclude_from_pos_files exclude_from_bom)
 		(fp_circle
 			(center 0 0)
 			(end 0 1.2)
@@ -29997,7 +30045,7 @@
 		(path "/d384fc08-7a14-4f66-a318-27ce132b50b2/1f44e9ce-7aaf-4951-a40b-c817e4d0a4c7/3c7052a8-5694-446f-bf74-a7e172762a69")
 		(sheetname "/Expression Inputs/Expression Input 1/")
 		(sheetfile "Expression Input.kicad_sch")
-		(attr through_hole)
+		(attr through_hole exclude_from_pos_files exclude_from_bom)
 		(fp_line
 			(start 17.17 -1.105)
 			(end 14.35 -1.105)
@@ -31942,7 +31990,7 @@
 		(path "/75dde623-5f53-41fa-821e-5c4efda934b7/16235043-3f31-40dc-a4c2-5d086f9b0d81")
 		(sheetname "/Midi Connector/")
 		(sheetfile "Midi Connector.kicad_sch")
-		(attr exclude_from_pos_files)
+		(attr exclude_from_pos_files exclude_from_bom)
 		(fp_circle
 			(center 0 0)
 			(end 0 1.2)
@@ -32171,7 +32219,7 @@
 		(path "/d384fc08-7a14-4f66-a318-27ce132b50b2/b6e017ae-1f83-4869-8b21-85f0180b03f1/50178f8e-e6a7-4a6f-9a81-610476b8f7fe")
 		(sheetname "/Expression Inputs/Expression Input 3/")
 		(sheetfile "Expression Input.kicad_sch")
-		(attr exclude_from_pos_files)
+		(attr exclude_from_pos_files exclude_from_bom)
 		(fp_circle
 			(center 0 0)
 			(end 0 1.2)
@@ -32368,7 +32416,7 @@
 		(path "/d384fc08-7a14-4f66-a318-27ce132b50b2/a3600d74-b3f8-43d8-ba0c-84d986db5879/3c7052a8-5694-446f-bf74-a7e172762a69")
 		(sheetname "/Expression Inputs/Expression Input 2/")
 		(sheetfile "Expression Input.kicad_sch")
-		(attr through_hole)
+		(attr through_hole exclude_from_pos_files exclude_from_bom)
 		(fp_line
 			(start 17.17 -1.105)
 			(end 14.35 -1.105)
@@ -32917,6 +32965,18 @@
 				)
 			)
 		)
+		(property "LCSC" "C25803"
+			(at 0 0 0)
+			(layer "F.SilkS")
+			(hide yes)
+			(uuid "0d5254bc-0273-4b7f-946d-34c5285e20a3")
+			(effects
+				(font
+					(size 1.27 1.27)
+					(thickness 0.15)
+				)
+			)
+		)
 		(property ki_fp_filters "R_*")
 		(path "/d384fc08-7a14-4f66-a318-27ce132b50b2/51359ecc-89cc-4b20-884e-91a1e6f3fb83/50986407-30f7-40f7-8b7d-db7b0403881a")
 		(sheetname "/Expression Inputs/Expression Input 4/")
@@ -33192,6 +33252,18 @@
 			(layer "F.Fab")
 			(hide yes)
 			(uuid "be91de60-aa9b-4d77-8837-dcbd09534022")
+			(effects
+				(font
+					(size 1.27 1.27)
+					(thickness 0.15)
+				)
+			)
+		)
+		(property "LCSC" "C25803"
+			(at 0 0 0)
+			(layer "F.SilkS")
+			(hide yes)
+			(uuid "f83b1931-b91a-4dbe-b6a5-3e855baa89a1")
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -33561,7 +33633,7 @@
 		(path "/75dde623-5f53-41fa-821e-5c4efda934b7/84719a4a-60de-40ef-b27c-bbf75271ff89")
 		(sheetname "/Midi Connector/")
 		(sheetfile "Midi Connector.kicad_sch")
-		(attr through_hole exclude_from_pos_files)
+		(attr through_hole exclude_from_pos_files exclude_from_bom)
 		(fp_line
 			(start -3 -9)
 			(end -1.5 -9)
@@ -33935,6 +34007,18 @@
 			(layer "F.Fab")
 			(hide yes)
 			(uuid "08d36439-a6f4-47fd-8686-d8ba11d3966f")
+			(effects
+				(font
+					(size 1.27 1.27)
+					(thickness 0.15)
+				)
+			)
+		)
+		(property "LCSC" "C25803"
+			(at 0 0 0)
+			(layer "F.SilkS")
+			(hide yes)
+			(uuid "2cb3b521-92e1-4e2b-8225-8c4181799f63")
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -36198,6 +36282,18 @@
 				)
 			)
 		)
+		(property "LCSC" "C25803"
+			(at 0 0 0)
+			(layer "F.SilkS")
+			(hide yes)
+			(uuid "17430d3c-ce6c-42a2-b49f-2bc5c0b4f6f2")
+			(effects
+				(font
+					(size 1.27 1.27)
+					(thickness 0.15)
+				)
+			)
+		)
 		(property ki_fp_filters "R_*")
 		(path "/d384fc08-7a14-4f66-a318-27ce132b50b2/1f44e9ce-7aaf-4951-a40b-c817e4d0a4c7/240b902d-33c4-4408-a44e-4d8a54f57eae")
 		(sheetname "/Expression Inputs/Expression Input 1/")
@@ -37039,7 +37135,7 @@
 		(path "/e1936ef5-b760-4ebe-803c-fa6bc7a213ac/6bbc44c5-58f1-47c7-ae2b-76638e4d2845")
 		(sheetname "/USB Connector/")
 		(sheetfile "USB_Connector.kicad_sch")
-		(attr exclude_from_pos_files)
+		(attr exclude_from_pos_files exclude_from_bom)
 		(fp_circle
 			(center 0 0)
 			(end 0 -1.2)
@@ -37246,7 +37342,7 @@
 		(path "/e1936ef5-b760-4ebe-803c-fa6bc7a213ac/f41d1685-81c3-4f1c-b664-ce213ac8d356")
 		(sheetname "/USB Connector/")
 		(sheetfile "USB_Connector.kicad_sch")
-		(attr exclude_from_pos_files)
+		(attr exclude_from_pos_files exclude_from_bom)
 		(fp_circle
 			(center 0 0)
 			(end 0 -1.2)
