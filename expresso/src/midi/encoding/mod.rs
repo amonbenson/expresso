@@ -4,6 +4,9 @@ pub use din::*;
 mod usb;
 pub use usb::*;
 
+#[cfg(test)]
+pub(crate) mod test_utils;
+
 #[cfg(feature = "embassy")]
 mod embassy_impl {
     use super::super::traits::PacketSink;

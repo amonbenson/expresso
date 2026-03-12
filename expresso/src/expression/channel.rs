@@ -154,45 +154,10 @@ where
 
 #[cfg(test)]
 mod tests {
-    use crate::midi::MidiEndpoint;
+    use crate::expression::test_utils::MessageCollector;
     use crate::settings::Settings;
 
     use super::*;
-
-    // ---- Test helper ----
-
-    #[derive(Debug)]
-    struct MessageCollector {
-        messages: [(u8, u8, u8); 16], // (channel, control, value)
-        count: usize,
-    }
-
-    impl MessageCollector {
-        fn new() -> Self {
-            Self {
-                messages: [(0, 0, 0); 16],
-                count: 0,
-            }
-        }
-
-        fn last(&self) -> (u8, u8, u8) {
-            self.messages[self.count - 1]
-        }
-    }
-
-    impl MidiSink for MessageCollector {
-        fn emit(&mut self, message: MidiMessage, _target: Option<MidiEndpoint>) {
-            if let MidiMessage::ControlChange {
-                channel,
-                control,
-                value,
-            } = message
-            {
-                self.messages[self.count] = (channel, control, value);
-                self.count += 1;
-            }
-        }
-    }
 
     // ---- calculate_resistance ----
 

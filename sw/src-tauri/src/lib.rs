@@ -1,12 +1,11 @@
-use std::{
-    sync::{Arc, Mutex},
-    thread,
-    time::Duration,
-};
+use std::sync::{Arc, Mutex};
+use std::thread;
+use std::time::Duration;
 
-use expresso::{
-    settings::{Settings, SettingsPatch},
-    sysex::{codec_7bit, SYSEX_MFID, SYSEX_MAGIC},
+use expresso::settings::{Settings, SettingsPatch};
+use expresso::sysex::{
+    codec_7bit, MAX_SETTINGS_BYTES, SYSEX_CMD_SETTINGS_GET, SYSEX_CMD_SETTINGS_PATCH, SYSEX_MAGIC,
+    SYSEX_MFID, SYSEX_RESPONSE_BIT,
 };
 use midir::{MidiInput, MidiInputConnection, MidiOutput, MidiOutputConnection};
 use serde::Serialize;
@@ -16,11 +15,6 @@ use tokio::{sync::mpsc, time::interval};
 const DEVICE_NAME: &str = "Expresso";
 const POLL_INTERVAL_MS: u64 = 500;
 const REQUEST_TIMEOUT_MS: u64 = 1000;
-
-const SYSEX_CMD_SETTINGS_GET: u8 = 0x01;
-const SYSEX_CMD_SETTINGS_PATCH: u8 = 0x03;
-const SYSEX_RESPONSE_BIT: u8 = 0x40;
-const MAX_SETTINGS_BYTES: usize = 256;
 
 // ---------------------------------------------------------------------------
 // Shared app state (accessible from MIDI thread and Tauri commands)
@@ -135,11 +129,7 @@ impl MidiState {
 // MIDI background thread
 // ---------------------------------------------------------------------------
 
-fn start_midi_thread(
-    app: AppHandle,
-    patch_rx: mpsc::Receiver<SettingsPatch>,
-    app_state: AppState,
-) {
+fn start_midi_thread(app: AppHandle, patch_rx: mpsc::Receiver<SettingsPatch>, app_state: AppState) {
     thread::Builder::new()
         .name("midi-manager".into())
         .spawn(move || {
@@ -295,10 +285,7 @@ fn poll_devices(
 
     // Detect new connection
     if !st.is_connected() {
-        let target = port_names
-            .iter()
-            .find(|n| n.contains(DEVICE_NAME))
-            .cloned();
+        let target = port_names.iter().find(|n| n.contains(DEVICE_NAME)).cloned();
 
         if let Some(port_name) = target {
             if let (Some(in_conn), Some(out_conn)) =
@@ -309,7 +296,10 @@ fn poll_devices(
                 st.output_conn = Some(out_conn);
                 st.connected_port_name = Some(port_name.clone());
                 app_state.lock().unwrap().connected = true;
-                let _ = app.emit("device-connected", DeviceConnectedPayload { name: port_name });
+                let _ = app.emit(
+                    "device-connected",
+                    DeviceConnectedPayload { name: port_name },
+                );
                 return true;
             }
         }
@@ -318,10 +308,7 @@ fn poll_devices(
     false
 }
 
-fn open_input(
-    port_name: &str,
-    sysex_tx: mpsc::Sender<Vec<u8>>,
-) -> Option<MidiInputConnection<()>> {
+fn open_input(port_name: &str, sysex_tx: mpsc::Sender<Vec<u8>>) -> Option<MidiInputConnection<()>> {
     let mut mi = MidiInput::new("expresso-in").ok()?;
     // midir ignores SysEx by default — explicitly receive everything
     mi.ignore(midir::Ignore::None);

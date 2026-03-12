@@ -215,45 +215,7 @@ impl<const SYSEX_N: usize> MidiDecoder for DinMidiDecoder<SYSEX_N> {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    struct CollectSink<T, const N: usize> {
-        buf: [Option<T>; N],
-        len: usize,
-    }
-
-    impl<T: Copy, const N: usize> CollectSink<T, N> {
-        fn new() -> Self {
-            Self {
-                buf: [None; N],
-                len: 0,
-            }
-        }
-
-        fn get(&self, i: usize) -> T {
-            self.buf[i].unwrap()
-        }
-
-        fn len(&self) -> usize {
-            self.len
-        }
-    }
-
-    #[derive(Debug)]
-    struct SinkFullError;
-
-    impl<T: Copy, const N: usize> PacketSink for CollectSink<T, N> {
-        type Packet = T;
-        type Error = SinkFullError;
-
-        fn emit(&mut self, packet: T) -> Result<(), SinkFullError> {
-            if self.len >= N {
-                return Err(SinkFullError);
-            }
-            self.buf[self.len] = Some(packet);
-            self.len += 1;
-            Ok(())
-        }
-    }
+    use crate::midi::encoding::test_utils::CollectSink;
 
     // Feed all bytes and return the result of the last one.
     fn feed_all<'d, const N: usize>(

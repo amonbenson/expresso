@@ -55,42 +55,8 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::midi::MidiEndpoint;
-    use crate::midi::{MidiMessage, MidiSink};
+    use crate::expression::test_utils::MessageCollector;
     use crate::settings::Settings;
-
-    #[derive(Debug)]
-    struct MessageCollector {
-        messages: [(u8, u8, u8); 32], // (channel, control, value)
-        count: usize,
-    }
-
-    impl MessageCollector {
-        fn new() -> Self {
-            Self {
-                messages: [(0, 0, 0); 32],
-                count: 0,
-            }
-        }
-
-        fn last(&self) -> (u8, u8, u8) {
-            self.messages[self.count - 1]
-        }
-    }
-
-    impl MidiSink for MessageCollector {
-        fn emit(&mut self, message: MidiMessage, _target: Option<MidiEndpoint>) {
-            if let MidiMessage::ControlChange {
-                channel,
-                control,
-                value,
-            } = message
-            {
-                self.messages[self.count] = (channel, control, value);
-                self.count += 1;
-            }
-        }
-    }
 
     // All channels process independently: N channels -> up to N messages per call.
     #[test]

@@ -4,13 +4,14 @@ use serde::{Deserialize, Serialize};
 pub const SYSEX_MFID: u8 = 0x7D;
 pub const SYSEX_MAGIC: [u8; 4] = [0x6F, 0x2E, 0x55, 0x00];
 
-const SYSEX_CMD_VERSION_REQUEST: u8 = 0x00;
-const SYSEX_CMD_SETTINGS_GET: u8 = 0x01;
-const SYSEX_CMD_SETTINGS_SET: u8 = 0x02;
-const SYSEX_CMD_SETTINGS_PATCH: u8 = 0x03;
+pub const SYSEX_CMD_VERSION_REQUEST: u8 = 0x00;
+pub const SYSEX_CMD_SETTINGS_GET: u8 = 0x01;
+pub const SYSEX_CMD_SETTINGS_SET: u8 = 0x02;
+pub const SYSEX_CMD_SETTINGS_PATCH: u8 = 0x03;
+pub const SYSEX_RESPONSE_BIT: u8 = 0x40;
 
 // Settings: 4 channels × ~51 bytes = ~204 bytes minimum.
-const MAX_SETTINGS_BYTES: usize = 256;
+pub const MAX_SETTINGS_BYTES: usize = 256;
 
 // Worst-case 7-bit-encoded size of MAX_SETTINGS_BYTES:
 //   ceil(256 / 7) * 8 = 37 * 8 = 296 bytes
