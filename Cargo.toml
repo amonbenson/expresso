@@ -3,11 +3,11 @@ resolver = "3"
 members = [
     "expresso",
     "fw",
-    "sw",
+    "sw/src-tauri",
     "xtask",
 ]
 
-default-members = ["sw"]
+default-members = ["sw/src-tauri"]
 
 # Firmware needs size optimization even in dev to fit in flash
 [profile.dev.package.expresso-fw]

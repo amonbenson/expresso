@@ -9,7 +9,11 @@ flash-fw = ["run", "-p", "xtask", "--", "flash-fw"]
 # Open fw/expresso.ioc in STM32CubeMX (reference only, code generation is not used)
 cubemx = ["run", "-p", "xtask", "--", "cubemx"]
 
-# Desktop software commands (default system toolchain)
-build-sw = ["build", "-p", "midibox-sw"]
-check-sw = ["check", "-p", "midibox-sw"]
-run-sw   = ["run",   "-p", "midibox-sw"]
+# Desktop software commands
+build-sw = "build -p expresso-sw"
+check-sw = "check -p expresso-sw"
+run-sw = "run -p expresso-sw"
+test-sw = "test -p expresso-sw"
+
+# Check all code
+check-all = "check -p expresso-sw && cargo check -p expresso-fw --target thumbv7em-none-eabi"
