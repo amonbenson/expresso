@@ -6,13 +6,13 @@ mod config;
 mod din_midi;
 mod expression;
 mod router;
+mod status_led;
 pub mod types;
 mod usb_midi;
 
 use core::cell::RefCell;
 use embassy_executor::Spawner;
 use embassy_stm32::adc::{Adc, AdcChannel, AdcConfig};
-use embassy_stm32::gpio::{Level, Output, Speed};
 use embassy_stm32::rcc::mux::{Adcsel, Clk48sel};
 use embassy_stm32::rcc::{
     Hse, HseMode, Pll, PllMul, PllPDiv, PllPreDiv, PllQDiv, PllRDiv, PllSource,
@@ -45,11 +45,22 @@ bind_interrupts!(struct Irqs {
 // ┌────────────┐     │          │
 // │ Expression ├────►│          │
 // └────────────┘     └──────────┘
+//
+// All tasks also send StatusEvents to the LED task:
+// ┌──────────┐
+// │ USB-MIDI ├──┐
+// ├──────────┤  │   ┌─────────┐
+// │ DIN-MIDI ├──┼──►│   LED   │
+// ├──────────┤  │   └─────────┘
+// │   Expr.  ├──┘
+// └──────────┘
 
 static TO_ROUTER: InMsgChannel = Channel::new();
 
 static ROUTER_TO_USB: MsgChannel = Channel::new();
 static ROUTER_TO_DIN: MsgChannel = Channel::new();
+
+static TO_LED: StatusChannel = Channel::new();
 
 #[embassy_executor::main]
 async fn main(spawner: Spawner) {
@@ -73,13 +84,23 @@ async fn main(spawner: Spawner) {
 
     let p = embassy_stm32::init(config);
 
-    let mut led_boot = Output::new(p.PB12, Level::Low, Speed::Low);
-    let mut led_init = Output::new(p.PB13, Level::Low, Speed::Low);
-
     static SETTINGS: StaticCell<SettingsMutex> = StaticCell::new();
     let settings = SETTINGS.init(Mutex::new(RefCell::new(Settings::default())));
 
-    led_boot.set_high();
+    // Fire Power(true) first so the LED lights up as early as possible.
+    // The event sits in the channel until the LED task processes it.
+    let _ = TO_LED.try_send(StatusEvent::Power(true));
+
+    // Status LED — PB4 (R), PB5 (G), PB0 (B) via TIM3 PWM
+    spawner
+        .spawn(status_led::task(
+            p.TIM3,
+            p.PB4,
+            p.PB5,
+            p.PB0,
+            TO_LED.receiver(),
+        ))
+        .unwrap();
 
     // USB MIDI
     let (usb_dev, midi_class) = usb_midi::build(p.USB, p.PA12, p.PA11);
@@ -90,6 +111,7 @@ async fn main(spawner: Spawner) {
             ROUTER_TO_USB.receiver(),
             TO_ROUTER.sender(),
             settings,
+            TO_LED.sender(),
         ))
         .unwrap();
 
@@ -114,6 +136,7 @@ async fn main(spawner: Spawner) {
             uart,
             ROUTER_TO_DIN.receiver(),
             TO_ROUTER.sender(),
+            TO_LED.sender(),
         ))
         .unwrap();
 
@@ -139,6 +162,7 @@ async fn main(spawner: Spawner) {
             ],
             TO_ROUTER.sender(),
             settings,
+            TO_LED.sender(),
         ))
         .unwrap();
 
@@ -151,8 +175,6 @@ async fn main(spawner: Spawner) {
             settings,
         ))
         .unwrap();
-
-    led_init.set_high();
 
     core::future::pending::<()>().await
 }

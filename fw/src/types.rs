@@ -20,3 +20,23 @@ pub type SettingsMutex = Mutex<CriticalSectionRawMutex, RefCell<Settings>>;
 pub type MsgChannel = Channel<CriticalSectionRawMutex, MidiMessage, MSG_CAP>;
 pub type MsgSender = Sender<'static, CriticalSectionRawMutex, MidiMessage, MSG_CAP>;
 pub type MsgReceiver = Receiver<'static, CriticalSectionRawMutex, MidiMessage, MSG_CAP>;
+
+// Status LED events. Persistent states use bool; triggers fire a one-time flash.
+pub const STATUS_CAP: usize = 16;
+pub type StatusChannel = Channel<CriticalSectionRawMutex, StatusEvent, STATUS_CAP>;
+pub type StatusSender = Sender<'static, CriticalSectionRawMutex, StatusEvent, STATUS_CAP>;
+pub type StatusReceiver = Receiver<'static, CriticalSectionRawMutex, StatusEvent, STATUS_CAP>;
+
+#[derive(Clone, Copy)]
+pub enum StatusEvent {
+    // Persistent on/off states
+    Power(bool),
+    UsbConnected(bool),
+    // One-time trigger events (produce a timed flash)
+    MidiUsbIn,
+    MidiUsbOut,
+    MidiDinIn,
+    MidiDinOut,
+    MidiExpression,
+    SettingsUpdate,
+}

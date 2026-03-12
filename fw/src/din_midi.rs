@@ -8,21 +8,32 @@ use expresso::midi::{
     DecodeResult, DinMidiDecoder, DinMidiEncoder, MidiDecoder, MidiEncoder, MidiEndpoint,
 };
 
-use crate::{InMsgSender, MsgReceiver, collector::Collector};
+use crate::collector::Collector;
+use crate::types::{InMsgSender, MsgReceiver, StatusEvent, StatusSender};
 
 type ByteCollector<const N: usize> = Collector<N, u8>;
 
 #[embassy_executor::task]
-pub async fn task(uart: Uart<'static, Async>, from_router: MsgReceiver, to_router: InMsgSender) {
+pub async fn task(
+    uart: Uart<'static, Async>,
+    from_router: MsgReceiver,
+    to_router: InMsgSender,
+    status: StatusSender,
+) {
     let (tx, rx) = uart.split();
 
-    match select(rx_loop(rx, to_router), tx_loop(tx, from_router)).await {
+    match select(
+        rx_loop(rx, to_router, status),
+        tx_loop(tx, from_router, status),
+    )
+    .await
+    {
         Either::First(_) => warn!("DIN MIDI RX loop exited"),
         Either::Second(_) => warn!("DIN MIDI TX loop exited"),
     }
 }
 
-async fn rx_loop(mut rx: UartRx<'static, Async>, to_router: InMsgSender) {
+async fn rx_loop(mut rx: UartRx<'static, Async>, to_router: InMsgSender, status: StatusSender) {
     let mut buffer = [0u8; 64];
     let mut decoder = DinMidiDecoder::<64>::new();
 
@@ -31,6 +42,7 @@ async fn rx_loop(mut rx: UartRx<'static, Async>, to_router: InMsgSender) {
             Ok(len) => {
                 for &byte in &buffer[..len] {
                     if let Some(DecodeResult::Message(msg)) = decoder.feed(byte) {
+                        let _ = status.try_send(StatusEvent::MidiDinIn);
                         if to_router.try_send((msg, MidiEndpoint::Din)).is_err() {
                             warn!("DIN MIDI RX: channel full, message dropped");
                         }
@@ -44,11 +56,12 @@ async fn rx_loop(mut rx: UartRx<'static, Async>, to_router: InMsgSender) {
     }
 }
 
-async fn tx_loop(mut tx: UartTx<'static, Async>, from_router: MsgReceiver) {
+async fn tx_loop(mut tx: UartTx<'static, Async>, from_router: MsgReceiver, status: StatusSender) {
     let mut encoder = DinMidiEncoder;
 
     loop {
         let message = from_router.receive().await;
+        let _ = status.try_send(StatusEvent::MidiDinOut);
         let mut buffer = ByteCollector::<4>::new();
         let _ = encoder.emit(&message, &mut buffer);
         if tx.write(&buffer.items()).await.is_err() {

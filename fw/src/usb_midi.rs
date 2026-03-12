@@ -10,12 +10,14 @@ use embassy_usb::class::midi::MidiClass;
 use expresso::midi::{
     DecodeResult, MidiDecoder, MidiEncoder, MidiEndpoint, UsbMidiDecoder, UsbMidiEncoder,
 };
-use expresso::sysex::{SysexDispatcher, SysexResponse};
+use expresso::sysex::{
+    SYSEX_CMD_SETTINGS_PATCH, SYSEX_CMD_SETTINGS_SET, SysexDispatcher, SysexResponse,
+};
 use static_cell::StaticCell;
 
 use crate::collector::Collector;
 use crate::config::{FW_VERSION_MAJOR, FW_VERSION_MINOR, FW_VERSION_PATCH};
-use crate::{InMsgSender, MsgReceiver, SettingsMutex};
+use crate::types::{InMsgSender, MsgReceiver, SettingsMutex, StatusEvent, StatusSender};
 
 pub type StaticDriver = Driver<'static, peripherals::USB>;
 pub type StaticDevice = UsbDevice<'static, StaticDriver>;
@@ -74,6 +76,7 @@ pub async fn io_task(
     from_router: MsgReceiver,
     to_router: InMsgSender,
     settings: &'static SettingsMutex,
+    status: StatusSender,
 ) {
     info!("USB MIDI IO task started");
 
@@ -89,6 +92,7 @@ pub async fn io_task(
 
     loop {
         tx.wait_connection().await;
+        let _ = status.try_send(StatusEvent::UsbConnected(true));
         info!("USB MIDI host connected");
 
         let tx_fut = async {
@@ -96,7 +100,8 @@ pub async fn io_task(
             loop {
                 match select(from_router.receive(), sysex_rx.receive()).await {
                     Either::First(message) => {
-                        // Regular MIDI messages fit in at most one packet.
+                        // Regular MIDI out — signal activity
+                        let _ = status.try_send(StatusEvent::MidiUsbOut);
                         let mut buffer = PacketBuffer::<4>::new();
                         let _ = encoder.emit(&message, &mut buffer);
                         for i in 0..buffer.len() {
@@ -106,8 +111,7 @@ pub async fn io_task(
                         }
                     }
                     Either::Second(response) => {
-                        // SysEx responses can be large; stream packets directly
-                        // to avoid a fixed-size intermediate buffer overflow.
+                        // SysEx response — stream packets directly
                         let payload = &response.data[..response.len];
                         let mut i = 0;
                         while i < payload.len() {
@@ -141,14 +145,22 @@ pub async fn io_task(
                     let packet = [chunk[0], chunk[1], chunk[2], chunk[3]];
                     match decoder.feed(packet) {
                         Some(DecodeResult::Message(msg)) => {
+                            let _ = status.try_send(StatusEvent::MidiUsbIn);
                             if to_router.try_send((msg, MidiEndpoint::Usb)).is_err() {
                                 warn!("USB MIDI RX: channel full, message dropped");
                             }
                         }
                         Some(DecodeResult::Sysex(payload)) => {
+                            // Detect settings-write commands before consuming the payload
+                            let cmd = payload.get(6).copied().unwrap_or(0);
                             let response =
                                 settings.lock(|s| sysex.handle(payload, &mut s.borrow_mut()));
                             if let Some(response) = response {
+                                if cmd == SYSEX_CMD_SETTINGS_SET
+                                    || cmd == SYSEX_CMD_SETTINGS_PATCH
+                                {
+                                    let _ = status.try_send(StatusEvent::SettingsUpdate);
+                                }
                                 if sysex_tx.try_send(response).is_err() {
                                     warn!("SysEx: response channel full");
                                 }
@@ -165,6 +177,7 @@ pub async fn io_task(
             Either::Second(_) => warn!("USB MIDI RX loop exited"),
         }
 
+        let _ = status.try_send(StatusEvent::UsbConnected(false));
         decoder.reset();
         info!("USB MIDI host disconnected, waiting for reconnect");
     }
