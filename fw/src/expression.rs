@@ -4,8 +4,8 @@ use embassy_time::{Duration, Timer};
 use expresso::expression::ExpressionGroup;
 use expresso::midi::{MidiEndpoint, MidiGenerator, MidiMessage, MidiSink};
 
-use crate::types::{InMsgSender, SettingsMutex, StatusEvent, StatusSender};
 use crate::config::EXPRESSION_POLL_HZ;
+use crate::types::{InMsgSender, SettingsMutex, StatusEvent, StatusSender};
 
 const VREF: f32 = 3.3;
 const ADC_MAX: f32 = 4095.0;

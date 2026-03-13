@@ -99,6 +99,7 @@ async fn main(spawner: Spawner) {
             p.PB5,
             p.PB0,
             TO_LED.receiver(),
+            settings,
         ))
         .unwrap();
 

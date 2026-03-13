@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::settings::{ExpressionChannelSettings, InputMode};
+use crate::settings::{ExpressionChannelSettings, InputMode, StatusSettingsPatch};
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub enum ExpressionChannelSettingsPatch {
@@ -23,4 +23,5 @@ pub enum ExpressionChannelSettingsPatch {
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub enum SettingsPatch {
     ExpressionChannel(usize, ExpressionChannelSettingsPatch),
+    Status(StatusSettingsPatch),
 }

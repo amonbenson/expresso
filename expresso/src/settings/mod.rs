@@ -4,6 +4,9 @@ pub use expression_channel::*;
 mod expression_group;
 pub use expression_group::*;
 
+mod status;
+pub use status::*;
+
 mod settings;
 pub use settings::*;
 

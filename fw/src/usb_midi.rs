@@ -156,8 +156,7 @@ pub async fn io_task(
                             let response =
                                 settings.lock(|s| sysex.handle(payload, &mut s.borrow_mut()));
                             if let Some(response) = response {
-                                if cmd == SYSEX_CMD_SETTINGS_SET
-                                    || cmd == SYSEX_CMD_SETTINGS_PATCH
+                                if cmd == SYSEX_CMD_SETTINGS_SET || cmd == SYSEX_CMD_SETTINGS_PATCH
                                 {
                                     let _ = status.try_send(StatusEvent::SettingsUpdate);
                                 }

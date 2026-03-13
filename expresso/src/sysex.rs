@@ -10,13 +10,14 @@ pub const SYSEX_CMD_SETTINGS_SET: u8 = 0x02;
 pub const SYSEX_CMD_SETTINGS_PATCH: u8 = 0x03;
 pub const SYSEX_RESPONSE_BIT: u8 = 0x40;
 
-// Settings: 4 channels × ~51 bytes = ~204 bytes minimum.
-pub const MAX_SETTINGS_BYTES: usize = 256;
+// Settings: 4 expression channels × ~57 bytes + StatusSettings ~24 bytes ≈ 252 bytes.
+// Use 320 to leave headroom for future additions.
+pub const MAX_SETTINGS_BYTES: usize = 320;
 
 // Worst-case 7-bit-encoded size of MAX_SETTINGS_BYTES:
-//   ceil(256 / 7) * 8 = 37 * 8 = 296 bytes
-// Plus SysEx framing: 0xF0 + MFID + cmd + <data> + 0xF7 = 3 + 296 + 1 = 300 bytes minimum.
-pub const SYSEX_RESPONSE_BUF_SIZE: usize = 320;
+//   ceil(320 / 7) * 8 = 46 * 8 = 368 bytes
+// Plus SysEx framing: 0xF0 + MFID + cmd + <data> + 0xF7 = 7 + 368 + 1 = 376 bytes.
+pub const SYSEX_RESPONSE_BUF_SIZE: usize = 400;
 
 pub struct SysexResponse {
     pub data: [u8; SYSEX_RESPONSE_BUF_SIZE],
