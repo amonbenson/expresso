@@ -26,7 +26,7 @@ jobs:
     runs-on: ${{ matrix.platform }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Install Linux system dependencies
         if: matrix.platform == 'ubuntu-22.04'
@@ -39,7 +39,7 @@ jobs:
             librsvg2-dev \
             patchelf
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: lts/*
           cache: npm
@@ -65,3 +65,27 @@ jobs:
           releaseDraft: true
           prerelease: false
           args: ${{ matrix.args }}
+
+  build-fw:
+    name: Build firmware
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: thumbv7em-none-eabihf
+
+      - uses: Swatinem/rust-cache@v2
+
+      - run: cargo build-fw
+
+      - name: Copy ELF with extension
+        run: cp target/thumbv7em-none-eabihf/release/expresso-fw target/thumbv7em-none-eabihf/release/expresso-fw.elf
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          files: target/thumbv7em-none-eabihf/release/expresso-fw.elf
