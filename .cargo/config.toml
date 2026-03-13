@@ -1,19 +1,24 @@
 [alias]
-# Firmware commands (STM32 target)
-build-fw = ["run", "-p", "xtask", "--", "build-fw"]
-check-fw = ["check", "-p", "expresso-fw", "--target", "thumbv7em-none-eabihf"]
+# Library (expresso crate)
+check-lib = ["check", "-p", "expresso"]
+build-lib = ["build", "-p", "expresso"]
+test-lib = ["test",  "-p", "expresso"]
 
-# Flash via USB DFU (device must be in DFU mode first: hold BOOT0 high + reset)
+# Firmware (STM32 target, flashing routed through xtask)
+check-fw = ["check", "-p", "expresso-fw", "--target", "thumbv7em-none-eabihf", "--release"]
+build-fw = ["build", "-p", "expresso-fw", "--target", "thumbv7em-none-eabihf", "--release"]
 flash-fw = ["run", "-p", "xtask", "--", "flash-fw"]
 
-# Open fw/expresso.ioc in STM32CubeMX (reference only, code generation is not used)
+# Desktop software (run via Tauri)
+check-sw = ["check", "-p", "expresso-sw"]
+build-sw = ["build", "-p", "expresso-sw"]
+test-sw = ["test", "-p", "expresso-sw"]
+dev-sw = ["run", "-p", "xtask", "--", "dev-sw"]
+
+# Combined (routed through xtask)
+check-all = ["run", "-p", "xtask", "--", "check-all"]
+build-all = ["run", "-p", "xtask", "--", "build-all"]
+test-all = ["run", "-p", "xtask", "--", "test-all"]
+
+# Tools
 cubemx = ["run", "-p", "xtask", "--", "cubemx"]
-
-# Desktop software commands
-build-sw = "build -p expresso-sw"
-check-sw = "check -p expresso-sw"
-run-sw = "run -p expresso-sw"
-test-sw = "test -p expresso-sw"
-
-# Check all code
-check-all = "check -p expresso-sw && cargo check -p expresso-fw --target thumbv7em-none-eabi"

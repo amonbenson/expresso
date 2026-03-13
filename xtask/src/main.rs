@@ -4,15 +4,26 @@ use std::process::Command;
 fn main() {
     let task = std::env::args().nth(1);
     match task.as_deref() {
-        Some("build-fw") => build_fw(),
+        Some("check-all") => check_all(),
+        Some("build-all") => build_all(),
+        Some("test-all") => test_all(),
+
         Some("flash-fw") => flash_fw(),
+        Some("dev-sw") => dev_sw(),
+
         Some("cubemx") => open_cubemx(),
+
         _ => {
             eprintln!("Usage: cargo xtask <task>");
             eprintln!();
             eprintln!("Tasks:");
-            eprintln!("  build-fw   Build firmware for STM32G431CB");
+            eprintln!("  check-all  Check lib + firmware + software");
+            eprintln!("  build-all  Build lib + firmware + software");
+            eprintln!("  test-all   Test lib + software");
+            eprintln!();
             eprintln!("  flash-fw   Build + flash firmware via USB DFU");
+            eprintln!("  dev-sw     Run desktop software in development mode (npm run tauri dev)");
+            eprintln!();
             eprintln!("  cubemx     Open fw/expresso.ioc in STM32CubeMX");
             eprintln!();
             eprintln!("DFU mode: hold BOOT0 high and reset the device before flashing.");
@@ -21,25 +32,30 @@ fn main() {
     }
 }
 
-fn build_fw() {
-    let status = cargo()
-        .args([
-            "build",
-            "-p",
-            "expresso-fw",
-            "--target",
-            "thumbv7em-none-eabihf",
-            "--release",
-        ])
-        .status()
-        .expect("failed to run cargo");
-    if !status.success() {
-        std::process::exit(status.code().unwrap_or(1));
-    }
+fn build_all() {
+    cargo(&["build-lib"]);
+    cargo(&["build-fw"]);
+    cargo(&["build-sw"]);
+}
+
+fn check_all() {
+    cargo(&["check-lib"]);
+    cargo(&["check-fw"]);
+    cargo(&["check-sw"]);
+}
+
+fn test_all() {
+    cargo(&["test-lib"]);
+    cargo(&["test-sw"]);
+}
+
+fn dev_sw() {
+    npm(&["install", "--prefix", "sw"]);
+    npm(&["run", "--prefix", "sw", "tauri", "dev"]);
 }
 
 fn flash_fw() {
-    build_fw();
+    cargo(&["build-fw"]);
 
     let root = workspace_root();
     let elf_src = root.join("target/thumbv7em-none-eabihf/release/expresso-fw");
@@ -188,7 +204,27 @@ fn workspace_root() -> PathBuf {
         .to_owned()
 }
 
-fn cargo() -> Command {
+fn npm(args: &[&str]) {
+    let status = Command::new("npm")
+        .args(args)
+        .status()
+        .expect("failed to run npm");
+    if !status.success() {
+        std::process::exit(status.code().unwrap_or(1));
+    }
+}
+
+fn cargo(args: &[&str]) {
+    let status = cargo_cmd()
+        .args(args)
+        .status()
+        .expect("failed to run cargo");
+    if !status.success() {
+        std::process::exit(status.code().unwrap_or(1));
+    }
+}
+
+fn cargo_cmd() -> Command {
     // Reuse the same cargo binary that invoked us
     let cargo = std::env::var_os("CARGO").unwrap_or_else(|| "cargo".into());
     let mut cmd = Command::new(cargo);
