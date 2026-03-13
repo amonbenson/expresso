@@ -22,6 +22,7 @@ use embassy_stm32::usart::Uart;
 use embassy_stm32::{Config, bind_interrupts, peripherals, usart, usb};
 use embassy_sync::blocking_mutex::Mutex;
 use embassy_sync::channel::Channel;
+use embassy_sync::pubsub::PubSubChannel;
 use expresso::settings::Settings;
 use static_cell::StaticCell;
 use types::*;
@@ -60,7 +61,7 @@ static TO_ROUTER: InMsgChannel = Channel::new();
 static ROUTER_TO_USB: MsgChannel = Channel::new();
 static ROUTER_TO_DIN: MsgChannel = Channel::new();
 
-static TO_LED: StatusChannel = Channel::new();
+static STATUS_CHANNEL: StatusChannel = PubSubChannel::new();
 
 #[embassy_executor::main]
 async fn main(spawner: Spawner) {
@@ -87,19 +88,21 @@ async fn main(spawner: Spawner) {
     static SETTINGS: StaticCell<SettingsMutex> = StaticCell::new();
     let settings = SETTINGS.init(Mutex::new(RefCell::new(Settings::default())));
 
+    // Create the two subscribers before spawning tasks that need them.
+    let led_sub = STATUS_CHANNEL.subscriber().unwrap();
+    let usb_status_sub = STATUS_CHANNEL.subscriber().unwrap();
+
     // Fire Power(true) first so the LED lights up as early as possible.
-    // The event sits in the channel until the LED task processes it.
-    let _ = TO_LED.try_send(StatusEvent::Power(true));
+    // The event sits in the subscriber queues until each task processes it.
+    STATUS_CHANNEL
+        .dyn_publisher()
+        .unwrap()
+        .publish_immediate(StatusEvent::Power(true));
 
     // Status LED — PB4 (R), PB5 (G), PB0 (B) via TIM3 PWM
     spawner
         .spawn(status_led::task(
-            p.TIM3,
-            p.PB4,
-            p.PB5,
-            p.PB0,
-            TO_LED.receiver(),
-            settings,
+            p.TIM3, p.PB4, p.PB5, p.PB0, led_sub, settings,
         ))
         .unwrap();
 
@@ -112,7 +115,8 @@ async fn main(spawner: Spawner) {
             ROUTER_TO_USB.receiver(),
             TO_ROUTER.sender(),
             settings,
-            TO_LED.sender(),
+            &STATUS_CHANNEL,
+            usb_status_sub,
         ))
         .unwrap();
 
@@ -137,7 +141,7 @@ async fn main(spawner: Spawner) {
             uart,
             ROUTER_TO_DIN.receiver(),
             TO_ROUTER.sender(),
-            TO_LED.sender(),
+            &STATUS_CHANNEL,
         ))
         .unwrap();
 
@@ -163,7 +167,7 @@ async fn main(spawner: Spawner) {
             ],
             TO_ROUTER.sender(),
             settings,
-            TO_LED.sender(),
+            &STATUS_CHANNEL,
         ))
         .unwrap();
 

@@ -9,7 +9,7 @@ use embassy_time::{Duration, Ticker};
 use expresso::settings::Color;
 use expresso::status::StatusState;
 
-use crate::types::{SettingsMutex, StatusReceiver};
+use crate::types::{SettingsMutex, StatusSubscriber};
 
 // --------------------------------------------------------------------------
 // Timing
@@ -46,7 +46,7 @@ pub async fn task(
     pin_r: Peri<'static, PB4>,
     pin_g: Peri<'static, PB5>,
     pin_b: Peri<'static, PB0>,
-    events: StatusReceiver,
+    mut events: StatusSubscriber,
     settings: &'static SettingsMutex,
 ) {
     let ch_r = PwmPin::new(pin_r, OutputType::PushPull);
@@ -74,7 +74,7 @@ pub async fn task(
     loop {
         let led_settings = settings.lock(|s| s.borrow().status);
 
-        match select(events.receive(), ticker.next()).await {
+        match select(events.next_message_pure(), ticker.next()).await {
             Either::First(event) => state.apply(event, &led_settings),
             Either::Second(_) => state.tick(),
         }

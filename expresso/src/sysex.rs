@@ -1,4 +1,5 @@
 use crate::settings::{Settings, SettingsPatch};
+use crate::status::StatusEvent;
 use serde::{Deserialize, Serialize};
 
 pub const SYSEX_MFID: u8 = 0x7D;
@@ -8,6 +9,8 @@ pub const SYSEX_CMD_VERSION_REQUEST: u8 = 0x00;
 pub const SYSEX_CMD_SETTINGS_GET: u8 = 0x01;
 pub const SYSEX_CMD_SETTINGS_SET: u8 = 0x02;
 pub const SYSEX_CMD_SETTINGS_PATCH: u8 = 0x03;
+/// Push notification: firmware → host. Carries a serialized [`StatusEvent`].
+pub const SYSEX_CMD_STATUS: u8 = 0x04;
 pub const SYSEX_RESPONSE_BIT: u8 = 0x40;
 
 // Settings: 4 expression channels × ~57 bytes + StatusSettings ~24 bytes ≈ 252 bytes.
@@ -77,6 +80,31 @@ pub mod codec_7bit {
         }
         Some(out)
     }
+}
+
+/// Encode a [`StatusEvent`] as a SysEx push notification (firmware → host).
+///
+/// The resulting frame uses [`SYSEX_CMD_STATUS`] with the response bit set
+/// since it is always an unsolicited notification rather than a reply.
+/// Returns `None` if the internal postcard serialization buffer overflows
+/// (should never happen for the current event set).
+pub fn encode_status_event(event: StatusEvent) -> Option<SysexResponse> {
+    let mut res = SysexResponse::default();
+    res.data[0] = 0xF0;
+    res.data[1] = SYSEX_MFID;
+    res.data[2] = SYSEX_MAGIC[0];
+    res.data[3] = SYSEX_MAGIC[1];
+    res.data[4] = SYSEX_MAGIC[2];
+    res.data[5] = SYSEX_MAGIC[3];
+    res.data[6] = SYSEX_CMD_STATUS | SYSEX_RESPONSE_BIT;
+
+    // StatusEvent serialises to at most a few bytes; 16 is more than enough.
+    let mut postcard_buf = [0u8; 16];
+    let serialized = postcard::to_slice(&event, &mut postcard_buf).ok()?;
+    let encoded_len = codec_7bit::encode(serialized, &mut res.data[7..]);
+    res.data[7 + encoded_len] = 0xF7;
+    res.len = 7 + encoded_len + 1;
+    Some(res)
 }
 
 impl SysexDispatcher {
@@ -163,6 +191,7 @@ impl SysexDispatcher {
 mod tests {
     use super::*;
     use crate::settings::Settings;
+    use crate::status::StatusEvent;
 
     #[test]
     fn version_request() {
@@ -353,6 +382,60 @@ mod tests {
         // Only channel 0 CC should have changed
         assert_eq!(s.expression.channels[0].cc, 77);
         assert_eq!(s.expression.channels[1].cc, 20);
+    }
+
+    #[test]
+    fn encode_status_event_is_valid_sysex() {
+        let events = [
+            StatusEvent::Power(true),
+            StatusEvent::Power(false),
+            StatusEvent::UsbConnected(true),
+            StatusEvent::MidiUsbIn,
+            StatusEvent::MidiDinOut,
+            StatusEvent::SettingsUpdate,
+        ];
+        for event in events {
+            let r = encode_status_event(event).unwrap();
+            assert_eq!(r.data[0], 0xF0, "missing SysEx start for {event:?}");
+            assert_eq!(r.data[1], SYSEX_MFID);
+            assert_eq!(r.data[2..6], SYSEX_MAGIC);
+            assert_eq!(
+                r.data[6],
+                SYSEX_CMD_STATUS | SYSEX_RESPONSE_BIT,
+                "wrong cmd byte for {event:?}"
+            );
+            assert_eq!(r.data[r.len - 1], 0xF7, "missing SysEx end for {event:?}");
+            // All data bytes between header and 0xF7 must be 7-bit safe
+            for &b in &r.data[7..r.len - 1] {
+                assert!(b < 0x80, "data byte {b:#04x} is not 7-bit safe for {event:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn encode_status_event_roundtrip() {
+        use crate::status::StatusEvent;
+        let events = [
+            StatusEvent::Power(true),
+            StatusEvent::Power(false),
+            StatusEvent::UsbConnected(false),
+            StatusEvent::MidiUsbIn,
+            StatusEvent::MidiUsbOut,
+            StatusEvent::MidiDinIn,
+            StatusEvent::MidiDinOut,
+            StatusEvent::MidiExpression,
+            StatusEvent::SettingsUpdate,
+        ];
+        for event in events {
+            let r = encode_status_event(event).unwrap();
+            // Decode: strip framing (bytes 7..len-1 are 7-bit encoded payload)
+            let encoded_payload = &r.data[7..r.len - 1];
+            let mut postcard_buf = [0u8; 16];
+            let decoded_len = codec_7bit::decode(encoded_payload, &mut postcard_buf).unwrap();
+            let decoded: StatusEvent =
+                postcard::from_bytes(&postcard_buf[..decoded_len]).unwrap();
+            assert_eq!(decoded, event);
+        }
     }
 
     #[test]

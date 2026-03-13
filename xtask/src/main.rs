@@ -15,7 +15,7 @@ enum Task {
     BuildAll(BuildAll),
     TestAll(TestAll),
     FlashFw(FlashFw),
-    DevSw(DevSw),
+    RunSw(RunSw),
     Cubemx(Cubemx),
 }
 
@@ -41,8 +41,8 @@ struct FlashFw {}
 
 /// Run desktop software in development mode (npm run tauri dev).
 #[derive(argh::FromArgs)]
-#[argh(subcommand, name = "dev-sw")]
-struct DevSw {}
+#[argh(subcommand, name = "run-sw")]
+struct RunSw {}
 
 /// Open fw/expresso.ioc in STM32CubeMX.
 #[derive(argh::FromArgs)]
@@ -56,7 +56,7 @@ fn main() {
         Task::BuildAll(_) => build_all(),
         Task::TestAll(_) => test_all(),
         Task::FlashFw(_) => flash_fw(),
-        Task::DevSw(_) => dev_sw(),
+        Task::RunSw(_) => run_sw(),
         Task::Cubemx(_) => open_cubemx(),
     }
 }
@@ -78,9 +78,9 @@ fn test_all() {
     cargo(&["test-sw"]);
 }
 
-fn dev_sw() {
-    npm(&["install", "--prefix", "sw"]);
-    npm(&["run", "--prefix", "sw", "tauri", "dev"]);
+fn run_sw() {
+    npm(&["install"]);
+    npm(&["run", "tauri", "dev"]);
 }
 
 fn flash_fw() {
@@ -234,8 +234,11 @@ fn workspace_root() -> PathBuf {
 }
 
 fn npm(args: &[&str]) {
-    let status = Command::new("npm")
+    // On Windows npm is a batch script (npm.cmd), not a plain executable.
+    let bin = if cfg!(windows) { "npm.cmd" } else { "npm" };
+    let status = Command::new(bin)
         .args(args)
+        .current_dir(workspace_root().join("sw"))
         .status()
         .expect("failed to run npm");
     if !status.success() {

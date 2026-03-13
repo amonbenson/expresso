@@ -2,6 +2,7 @@ use core::cell::RefCell;
 use embassy_sync::blocking_mutex::Mutex;
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::channel::{Channel, Receiver, Sender};
+use embassy_sync::pubsub::{PubSubChannel, Subscriber};
 use expresso::midi::{MidiEndpoint, MidiMessage};
 use expresso::settings::Settings;
 
@@ -23,8 +24,14 @@ pub type MsgChannel = Channel<CriticalSectionRawMutex, MidiMessage, MSG_CAP>;
 pub type MsgSender = Sender<'static, CriticalSectionRawMutex, MidiMessage, MSG_CAP>;
 pub type MsgReceiver = Receiver<'static, CriticalSectionRawMutex, MidiMessage, MSG_CAP>;
 
-// Status LED events. Persistent states use bool; triggers fire a one-time flash.
-pub const STATUS_CAP: usize = 16;
-pub type StatusChannel = Channel<CriticalSectionRawMutex, StatusEvent, STATUS_CAP>;
-pub type StatusSender = Sender<'static, CriticalSectionRawMutex, StatusEvent, STATUS_CAP>;
-pub type StatusReceiver = Receiver<'static, CriticalSectionRawMutex, StatusEvent, STATUS_CAP>;
+// Status events. Published by all subsystems; subscribed by status_led and usb_midi.
+//
+// CAP = per-subscriber queue depth
+// SUBS = max subscribers (status_led + usb_midi)
+// PUBS = 0 — all publishers use dyn_publisher() which doesn't take a slot
+pub const STATUS_CAP: usize = 8;
+pub const STATUS_SUBS: usize = 2;
+pub type StatusChannel =
+    PubSubChannel<CriticalSectionRawMutex, StatusEvent, STATUS_CAP, STATUS_SUBS, 1>;
+pub type StatusSubscriber =
+    Subscriber<'static, CriticalSectionRawMutex, StatusEvent, STATUS_CAP, STATUS_SUBS, 1>;

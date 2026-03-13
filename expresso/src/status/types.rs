@@ -1,8 +1,10 @@
+use serde::{Deserialize, Serialize};
+
 /// Events emitted by the various subsystems to report their current activity.
 ///
 /// Persistent events (`Power`, `UsbConnected`) represent ongoing states.
 /// All other events are one-shot triggers that produce a timed animation.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub enum StatusEvent {
     /// Device is powered on (`true`) or off (`false`).
     Power(bool),

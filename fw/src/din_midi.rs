@@ -9,7 +9,7 @@ use expresso::midi::{
 };
 
 use crate::collector::Collector;
-use crate::types::{InMsgSender, MsgReceiver, StatusEvent, StatusSender};
+use crate::types::{InMsgSender, MsgReceiver, StatusChannel, StatusEvent};
 
 type ByteCollector<const N: usize> = Collector<N, u8>;
 
@@ -18,7 +18,7 @@ pub async fn task(
     uart: Uart<'static, Async>,
     from_router: MsgReceiver,
     to_router: InMsgSender,
-    status: StatusSender,
+    status: &'static StatusChannel,
 ) {
     let (tx, rx) = uart.split();
 
@@ -33,7 +33,12 @@ pub async fn task(
     }
 }
 
-async fn rx_loop(mut rx: UartRx<'static, Async>, to_router: InMsgSender, status: StatusSender) {
+async fn rx_loop(
+    mut rx: UartRx<'static, Async>,
+    to_router: InMsgSender,
+    status: &'static StatusChannel,
+) {
+    let pub_ = status.dyn_publisher().unwrap();
     let mut buffer = [0u8; 64];
     let mut decoder = DinMidiDecoder::<64>::new();
 
@@ -42,7 +47,7 @@ async fn rx_loop(mut rx: UartRx<'static, Async>, to_router: InMsgSender, status:
             Ok(len) => {
                 for &byte in &buffer[..len] {
                     if let Some(DecodeResult::Message(msg)) = decoder.feed(byte) {
-                        let _ = status.try_send(StatusEvent::MidiDinIn);
+                        pub_.publish_immediate(StatusEvent::MidiDinIn);
                         if to_router.try_send((msg, MidiEndpoint::Din)).is_err() {
                             warn!("DIN MIDI RX: channel full, message dropped");
                         }
@@ -56,12 +61,17 @@ async fn rx_loop(mut rx: UartRx<'static, Async>, to_router: InMsgSender, status:
     }
 }
 
-async fn tx_loop(mut tx: UartTx<'static, Async>, from_router: MsgReceiver, status: StatusSender) {
+async fn tx_loop(
+    mut tx: UartTx<'static, Async>,
+    from_router: MsgReceiver,
+    status: &'static StatusChannel,
+) {
+    let pub_ = status.dyn_publisher().unwrap();
     let mut encoder = DinMidiEncoder;
 
     loop {
         let message = from_router.receive().await;
-        let _ = status.try_send(StatusEvent::MidiDinOut);
+        pub_.publish_immediate(StatusEvent::MidiDinOut);
         let mut buffer = ByteCollector::<4>::new();
         let _ = encoder.emit(&message, &mut buffer);
         if tx.write(&buffer.items()).await.is_err() {

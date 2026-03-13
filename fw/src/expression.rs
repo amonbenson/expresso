@@ -5,7 +5,7 @@ use expresso::expression::ExpressionGroup;
 use expresso::midi::{MidiEndpoint, MidiGenerator, MidiMessage, MidiSink};
 
 use crate::config::EXPRESSION_POLL_HZ;
-use crate::types::{InMsgSender, SettingsMutex, StatusEvent, StatusSender};
+use crate::types::{InMsgSender, SettingsMutex, StatusChannel, StatusEvent};
 
 const VREF: f32 = 3.3;
 const ADC_MAX: f32 = 4095.0;
@@ -13,13 +13,16 @@ const ADC_MAX: f32 = 4095.0;
 // Forwards expression CC messages to the TO_ROUTER channel and signals LED activity.
 struct ExpSink {
     to_router: InMsgSender,
-    status: StatusSender,
+    status: &'static StatusChannel,
 }
 
 impl MidiSink for ExpSink {
     fn emit(&mut self, message: MidiMessage, _target: Option<MidiEndpoint>) {
         let _ = self.to_router.try_send((message, MidiEndpoint::Expression));
-        let _ = self.status.try_send(StatusEvent::MidiExpression);
+        self.status
+            .dyn_publisher()
+            .unwrap()
+            .publish_immediate(StatusEvent::MidiExpression);
     }
 }
 
@@ -31,7 +34,7 @@ pub async fn task(
     mut adc2_channels: [(AnyAdcChannel<'static, ADC2>, AnyAdcChannel<'static, ADC2>); 2],
     to_router: InMsgSender,
     settings: &'static SettingsMutex,
-    status: StatusSender,
+    status: &'static StatusChannel,
 ) {
     let mut group = ExpressionGroup::new();
     let mut sink = ExpSink { to_router, status };

@@ -13,7 +13,7 @@ flash-fw = ["run", "-p", "xtask", "--", "flash-fw"]
 check-sw = ["check", "-p", "expresso-sw"]
 build-sw = ["build", "-p", "expresso-sw"]
 test-sw = ["test", "-p", "expresso-sw"]
-dev-sw = ["run", "-p", "xtask", "--", "dev-sw"]
+run-sw = ["run", "-p", "xtask", "--", "run-sw"]
 
 # Combined (routed through xtask)
 check-all = ["run", "-p", "xtask", "--", "check-all"]
