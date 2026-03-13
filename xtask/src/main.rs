@@ -1,34 +1,63 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+/// Expresso workspace task runner.
+#[derive(argh::FromArgs)]
+struct Args {
+    #[argh(subcommand)]
+    task: Task,
+}
+
+#[derive(argh::FromArgs)]
+#[argh(subcommand)]
+enum Task {
+    CheckAll(CheckAll),
+    BuildAll(BuildAll),
+    TestAll(TestAll),
+    FlashFw(FlashFw),
+    DevSw(DevSw),
+    Cubemx(Cubemx),
+}
+
+/// Check lib + firmware + software.
+#[derive(argh::FromArgs)]
+#[argh(subcommand, name = "check-all")]
+struct CheckAll {}
+
+/// Build lib + firmware + software.
+#[derive(argh::FromArgs)]
+#[argh(subcommand, name = "build-all")]
+struct BuildAll {}
+
+/// Test lib + software.
+#[derive(argh::FromArgs)]
+#[argh(subcommand, name = "test-all")]
+struct TestAll {}
+
+/// Build + flash firmware via USB DFU (device must be in DFU mode first).
+#[derive(argh::FromArgs)]
+#[argh(subcommand, name = "flash-fw")]
+struct FlashFw {}
+
+/// Run desktop software in development mode (npm run tauri dev).
+#[derive(argh::FromArgs)]
+#[argh(subcommand, name = "dev-sw")]
+struct DevSw {}
+
+/// Open fw/expresso.ioc in STM32CubeMX.
+#[derive(argh::FromArgs)]
+#[argh(subcommand, name = "cubemx")]
+struct Cubemx {}
+
 fn main() {
-    let task = std::env::args().nth(1);
-    match task.as_deref() {
-        Some("check-all") => check_all(),
-        Some("build-all") => build_all(),
-        Some("test-all") => test_all(),
-
-        Some("flash-fw") => flash_fw(),
-        Some("dev-sw") => dev_sw(),
-
-        Some("cubemx") => open_cubemx(),
-
-        _ => {
-            eprintln!("Usage: cargo xtask <task>");
-            eprintln!();
-            eprintln!("Tasks:");
-            eprintln!("  check-all  Check lib + firmware + software");
-            eprintln!("  build-all  Build lib + firmware + software");
-            eprintln!("  test-all   Test lib + software");
-            eprintln!();
-            eprintln!("  flash-fw   Build + flash firmware via USB DFU");
-            eprintln!("  dev-sw     Run desktop software in development mode (npm run tauri dev)");
-            eprintln!();
-            eprintln!("  cubemx     Open fw/expresso.ioc in STM32CubeMX");
-            eprintln!();
-            eprintln!("DFU mode: hold BOOT0 high and reset the device before flashing.");
-            std::process::exit(1);
-        }
+    let args: Args = argh::from_env();
+    match args.task {
+        Task::CheckAll(_) => check_all(),
+        Task::BuildAll(_) => build_all(),
+        Task::TestAll(_) => test_all(),
+        Task::FlashFw(_) => flash_fw(),
+        Task::DevSw(_) => dev_sw(),
+        Task::Cubemx(_) => open_cubemx(),
     }
 }
 
