@@ -407,7 +407,10 @@ mod tests {
             assert_eq!(r.data[r.len - 1], 0xF7, "missing SysEx end for {event:?}");
             // All data bytes between header and 0xF7 must be 7-bit safe
             for &b in &r.data[7..r.len - 1] {
-                assert!(b < 0x80, "data byte {b:#04x} is not 7-bit safe for {event:?}");
+                assert!(
+                    b < 0x80,
+                    "data byte {b:#04x} is not 7-bit safe for {event:?}"
+                );
             }
         }
     }
@@ -432,8 +435,7 @@ mod tests {
             let encoded_payload = &r.data[7..r.len - 1];
             let mut postcard_buf = [0u8; 16];
             let decoded_len = codec_7bit::decode(encoded_payload, &mut postcard_buf).unwrap();
-            let decoded: StatusEvent =
-                postcard::from_bytes(&postcard_buf[..decoded_len]).unwrap();
+            let decoded: StatusEvent = postcard::from_bytes(&postcard_buf[..decoded_len]).unwrap();
             assert_eq!(decoded, event);
         }
     }

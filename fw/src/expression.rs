@@ -18,11 +18,12 @@ struct ExpSink {
 
 impl MidiSink for ExpSink {
     fn emit(&mut self, message: MidiMessage, _target: Option<MidiEndpoint>) {
-        let _ = self.to_router.try_send((message, MidiEndpoint::Expression));
-        self.status
-            .dyn_publisher()
-            .unwrap()
-            .publish_immediate(StatusEvent::MidiExpression);
+        self.to_router
+            .try_send((message, MidiEndpoint::Expression))
+            .ok();
+        if let Ok(p) = self.status.dyn_publisher() {
+            p.publish_immediate(StatusEvent::MidiExpression);
+        }
     }
 }
 
@@ -49,7 +50,9 @@ pub async fn task(
         ];
 
         settings.lock(|s| {
-            let _ = group.generate_midi(inputs, &mut sink, &mut s.borrow_mut());
+            group
+                .generate_midi(inputs, &mut sink, &mut s.borrow_mut())
+                .ok();
         });
 
         Timer::after(interval).await;

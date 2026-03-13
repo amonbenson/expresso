@@ -200,7 +200,7 @@ async fn midi_loop(
                             if let Some(settings) = decode_settings_payload(&raw) {
                                 app_state.lock().unwrap().settings = Some(settings);
                                 eprintln!("[midi] Emitting settings-loaded to frontend");
-                                let _ = app.emit("settings-loaded", &settings);
+                                app.emit("settings-loaded", &settings).ok();
                             }
                         }
                         // PATCH ack has no payload to process
@@ -278,7 +278,8 @@ fn poll_devices(
                 as_.connected = false;
                 as_.settings = None;
             }
-            let _ = app.emit("device-disconnected", DeviceDisconnectedPayload {});
+            app.emit("device-disconnected", DeviceDisconnectedPayload {})
+                .ok();
             eprintln!("[midi] Expresso disconnected");
         }
     }
@@ -296,10 +297,11 @@ fn poll_devices(
                 st.output_conn = Some(out_conn);
                 st.connected_port_name = Some(port_name.clone());
                 app_state.lock().unwrap().connected = true;
-                let _ = app.emit(
+                app.emit(
                     "device-connected",
                     DeviceConnectedPayload { name: port_name },
-                );
+                )
+                .ok();
                 return true;
             }
         }
@@ -322,7 +324,7 @@ fn open_input(port_name: &str, sysex_tx: mpsc::Sender<Vec<u8>>) -> Option<MidiIn
         "expresso-rx",
         move |_ts, data, _| {
             if !data.is_empty() {
-                let _ = sysex_tx.blocking_send(data.to_vec());
+                sysex_tx.blocking_send(data.to_vec()).ok();
             }
         },
         (),

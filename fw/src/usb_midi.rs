@@ -125,7 +125,9 @@ pub async fn io_task(
 
     loop {
         tx.wait_connection().await;
-        status_ch.dyn_publisher().unwrap().publish_immediate(StatusEvent::UsbConnected(true));
+        if let Ok(p) = status_ch.dyn_publisher() {
+            p.publish_immediate(StatusEvent::UsbConnected(true));
+        }
         info!("USB MIDI host connected");
 
         let tx_fut = async {
@@ -139,9 +141,11 @@ pub async fn io_task(
                 .await
                 {
                     Either3::First(message) => {
-                        status_ch.dyn_publisher().unwrap().publish_immediate(StatusEvent::MidiUsbOut);
+                        if let Ok(p) = status_ch.dyn_publisher() {
+                            p.publish_immediate(StatusEvent::MidiUsbOut);
+                        }
                         let mut buffer = PacketBuffer::<4>::new();
-                        let _ = encoder.emit(&message, &mut buffer);
+                        encoder.emit(&message, &mut buffer).ok();
                         for i in 0..buffer.len() {
                             if tx.write_packet(buffer.get(i)).await.is_err() {
                                 return;
@@ -175,7 +179,9 @@ pub async fn io_task(
                     let packet = [chunk[0], chunk[1], chunk[2], chunk[3]];
                     match decoder.feed(packet) {
                         Some(DecodeResult::Message(msg)) => {
-                            status_ch.dyn_publisher().unwrap().publish_immediate(StatusEvent::MidiUsbIn);
+                            if let Ok(p) = status_ch.dyn_publisher() {
+                                p.publish_immediate(StatusEvent::MidiUsbIn);
+                            }
                             if to_router.try_send((msg, MidiEndpoint::Usb)).is_err() {
                                 warn!("USB MIDI RX: channel full, message dropped");
                             }
@@ -187,7 +193,9 @@ pub async fn io_task(
                             if let Some(response) = response {
                                 if cmd == SYSEX_CMD_SETTINGS_SET || cmd == SYSEX_CMD_SETTINGS_PATCH
                                 {
-                                    status_ch.dyn_publisher().unwrap().publish_immediate(StatusEvent::SettingsUpdate);
+                                    if let Ok(p) = status_ch.dyn_publisher() {
+                                        p.publish_immediate(StatusEvent::SettingsUpdate);
+                                    }
                                 }
                                 if sysex_tx.try_send(response).is_err() {
                                     warn!("SysEx: response channel full");
@@ -205,7 +213,9 @@ pub async fn io_task(
             Either::Second(_) => warn!("USB MIDI RX loop exited"),
         }
 
-        status_ch.dyn_publisher().unwrap().publish_immediate(StatusEvent::UsbConnected(false));
+        if let Ok(p) = status_ch.dyn_publisher() {
+            p.publish_immediate(StatusEvent::UsbConnected(false));
+        }
         decoder.reset();
         info!("USB MIDI host disconnected, waiting for reconnect");
     }

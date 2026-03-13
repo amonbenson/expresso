@@ -28,10 +28,11 @@ pub type MsgReceiver = Receiver<'static, CriticalSectionRawMutex, MidiMessage, M
 //
 // CAP = per-subscriber queue depth
 // SUBS = max subscribers (status_led + usb_midi)
-// PUBS = 0 — all publishers use dyn_publisher() which doesn't take a slot
+// PUBS = 2 — dyn_publisher() does count against this limit in embassy-sync 0.7.
+// All publishers create and drop within a single poll, so 2 is a safe upper bound.
 pub const STATUS_CAP: usize = 8;
 pub const STATUS_SUBS: usize = 2;
 pub type StatusChannel =
-    PubSubChannel<CriticalSectionRawMutex, StatusEvent, STATUS_CAP, STATUS_SUBS, 1>;
+    PubSubChannel<CriticalSectionRawMutex, StatusEvent, STATUS_CAP, STATUS_SUBS, 2>;
 pub type StatusSubscriber =
-    Subscriber<'static, CriticalSectionRawMutex, StatusEvent, STATUS_CAP, STATUS_SUBS, 1>;
+    Subscriber<'static, CriticalSectionRawMutex, StatusEvent, STATUS_CAP, STATUS_SUBS, 2>;

@@ -38,7 +38,6 @@ async fn rx_loop(
     to_router: InMsgSender,
     status: &'static StatusChannel,
 ) {
-    let pub_ = status.dyn_publisher().unwrap();
     let mut buffer = [0u8; 64];
     let mut decoder = DinMidiDecoder::<64>::new();
 
@@ -47,7 +46,9 @@ async fn rx_loop(
             Ok(len) => {
                 for &byte in &buffer[..len] {
                     if let Some(DecodeResult::Message(msg)) = decoder.feed(byte) {
-                        pub_.publish_immediate(StatusEvent::MidiDinIn);
+                        if let Ok(p) = status.dyn_publisher() {
+                            p.publish_immediate(StatusEvent::MidiDinIn);
+                        }
                         if to_router.try_send((msg, MidiEndpoint::Din)).is_err() {
                             warn!("DIN MIDI RX: channel full, message dropped");
                         }
@@ -66,14 +67,15 @@ async fn tx_loop(
     from_router: MsgReceiver,
     status: &'static StatusChannel,
 ) {
-    let pub_ = status.dyn_publisher().unwrap();
     let mut encoder = DinMidiEncoder;
 
     loop {
         let message = from_router.receive().await;
-        pub_.publish_immediate(StatusEvent::MidiDinOut);
+        if let Ok(p) = status.dyn_publisher() {
+            p.publish_immediate(StatusEvent::MidiDinOut);
+        }
         let mut buffer = ByteCollector::<4>::new();
-        let _ = encoder.emit(&message, &mut buffer);
+        encoder.emit(&message, &mut buffer).ok();
         if tx.write(&buffer.items()).await.is_err() {
             warn!("DIN MIDI TX: write error");
         }

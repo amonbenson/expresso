@@ -94,10 +94,9 @@ async fn main(spawner: Spawner) {
 
     // Fire Power(true) first so the LED lights up as early as possible.
     // The event sits in the subscriber queues until each task processes it.
-    STATUS_CHANNEL
-        .dyn_publisher()
-        .unwrap()
-        .publish_immediate(StatusEvent::Power(true));
+    if let Ok(p) = STATUS_CHANNEL.dyn_publisher() {
+        p.publish_immediate(StatusEvent::Power(true));
+    }
 
     // Status LED — PB4 (R), PB5 (G), PB0 (B) via TIM3 PWM
     spawner
