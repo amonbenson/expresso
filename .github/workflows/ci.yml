@@ -60,5 +60,5 @@ jobs:
           sudo mkdir -p /opt/renode
           sudo tar -xzf renode-1.16.1.linux-portable.tar.gz -C /opt/renode --strip-components=1
       - name: Install robotframework
-        run: pip install robotframework==7.0
+        run: pip install -r /opt/renode/tests/requirements.txt
       - run: cargo test-fw
