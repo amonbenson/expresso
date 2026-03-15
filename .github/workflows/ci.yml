@@ -58,7 +58,9 @@ jobs:
         run: |
           wget -q https://github.com/renode/renode/releases/download/v1.16.1/renode-1.16.1.linux-portable.tar.gz
           sudo tar -xzf renode-1.16.1.linux-portable.tar.gz -C /opt
-          echo "RENODE_DIR=$(echo /opt/renode*)" >> $GITHUB_ENV
+          RENODE_DIR=$(echo /opt/renode*)
+          sudo ln -s "$RENODE_DIR/renode" "$RENODE_DIR/Renode.exe"
+          echo "RENODE_DIR=$RENODE_DIR" >> $GITHUB_ENV
       - name: Install robotframework
         run: pip install -r $RENODE_DIR/tests/requirements.txt
       - run: cargo test-fw
