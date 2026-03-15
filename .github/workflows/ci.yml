@@ -46,7 +46,7 @@ jobs:
       - run: cargo test-sw
 
   test-fw:
-    name: Test firmware (Renode)
+    name: Test firmware
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -56,8 +56,9 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: Install Renode
         run: |
-          wget -q https://github.com/renode/renode/releases/download/v1.15.3/renode_1.15.3_amd64.deb
-          sudo apt-get install -y ./renode_1.15.3_amd64.deb
+          wget -q https://github.com/renode/renode/releases/download/v1.16.1.19220/renode-1.16.1.19220.linux-portable.tar.gz
+          sudo mkdir -p /opt/renode
+          sudo tar -xzf renode-1.16.1.19220.linux-portable.tar.gz -C /opt/renode --strip-components=1
       - name: Install robotframework
         run: pip install robotframework==7.0
       - run: cargo test-fw
