@@ -133,7 +133,9 @@ where
             InputMode::Switch => {
                 Self::apply_switch_transform(self.current_input, settings.input.switch)
             }
-            InputMode::Compat => (((self.current_input - 0.4) / 0.22) * 127.0) as u8,
+            InputMode::Compat => {
+                (((self.current_input - 0.4) / 0.22).clamp(0.0, 1.0) * 127.0) as u8
+            }
         };
 
         // Emit the new value if it changed. Use our index as the MIDI channel

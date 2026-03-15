@@ -386,12 +386,27 @@ mod tests {
 
     #[test]
     fn encode_status_event_is_valid_sysex() {
+        use crate::midi::{MidiEndpoint, MidiMessage};
+        use crate::status::MidiDirection;
+        let cc = MidiMessage::ControlChange {
+            channel: 0,
+            control: 0,
+            value: 0,
+        };
         let events = [
             StatusEvent::Power(true),
             StatusEvent::Power(false),
             StatusEvent::UsbConnected(true),
-            StatusEvent::MidiUsbIn,
-            StatusEvent::MidiDinOut,
+            StatusEvent::Midi {
+                endpoint: MidiEndpoint::Usb,
+                direction: MidiDirection::In,
+                message: cc,
+            },
+            StatusEvent::Midi {
+                endpoint: MidiEndpoint::Din,
+                direction: MidiDirection::Out,
+                message: cc,
+            },
             StatusEvent::SettingsUpdate,
         ];
         for event in events {
@@ -417,16 +432,42 @@ mod tests {
 
     #[test]
     fn encode_status_event_roundtrip() {
-        use crate::status::StatusEvent;
+        use crate::midi::{MidiEndpoint, MidiMessage};
+        use crate::status::{MidiDirection, StatusEvent};
+        let cc = MidiMessage::ControlChange {
+            channel: 1,
+            control: 7,
+            value: 64,
+        };
         let events = [
             StatusEvent::Power(true),
             StatusEvent::Power(false),
             StatusEvent::UsbConnected(false),
-            StatusEvent::MidiUsbIn,
-            StatusEvent::MidiUsbOut,
-            StatusEvent::MidiDinIn,
-            StatusEvent::MidiDinOut,
-            StatusEvent::MidiExpression,
+            StatusEvent::Midi {
+                endpoint: MidiEndpoint::Usb,
+                direction: MidiDirection::In,
+                message: cc,
+            },
+            StatusEvent::Midi {
+                endpoint: MidiEndpoint::Usb,
+                direction: MidiDirection::Out,
+                message: cc,
+            },
+            StatusEvent::Midi {
+                endpoint: MidiEndpoint::Din,
+                direction: MidiDirection::In,
+                message: cc,
+            },
+            StatusEvent::Midi {
+                endpoint: MidiEndpoint::Din,
+                direction: MidiDirection::Out,
+                message: cc,
+            },
+            StatusEvent::Midi {
+                endpoint: MidiEndpoint::Expression,
+                direction: MidiDirection::Out,
+                message: cc,
+            },
             StatusEvent::SettingsUpdate,
         ];
         for event in events {

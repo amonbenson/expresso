@@ -7,6 +7,7 @@ use embassy_stm32::{
 use expresso::midi::{
     DecodeResult, DinMidiDecoder, DinMidiEncoder, MidiDecoder, MidiEncoder, MidiEndpoint,
 };
+use expresso::status::MidiDirection;
 
 use crate::collector::Collector;
 use crate::types::{InMsgSender, MsgReceiver, StatusChannel, StatusEvent};
@@ -47,7 +48,11 @@ async fn rx_loop(
                 for &byte in &buffer[..len] {
                     if let Some(DecodeResult::Message(msg)) = decoder.feed(byte) {
                         if let Ok(p) = status.dyn_publisher() {
-                            p.publish_immediate(StatusEvent::MidiDinIn);
+                            p.publish_immediate(StatusEvent::Midi {
+                                endpoint: MidiEndpoint::Din,
+                                direction: MidiDirection::In,
+                                message: msg,
+                            });
                         }
                         if to_router.try_send((msg, MidiEndpoint::Din)).is_err() {
                             warn!("DIN MIDI RX: channel full, message dropped");
@@ -72,7 +77,11 @@ async fn tx_loop(
     loop {
         let message = from_router.receive().await;
         if let Ok(p) = status.dyn_publisher() {
-            p.publish_immediate(StatusEvent::MidiDinOut);
+            p.publish_immediate(StatusEvent::Midi {
+                endpoint: MidiEndpoint::Din,
+                direction: MidiDirection::Out,
+                message,
+            });
         }
         let mut buffer = ByteCollector::<4>::new();
         encoder.emit(&message, &mut buffer).ok();

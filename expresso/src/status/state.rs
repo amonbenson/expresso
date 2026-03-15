@@ -1,6 +1,7 @@
+use crate::midi::MidiEndpoint;
 use crate::settings::{Color, StatusSettings};
 
-use super::StatusEvent;
+use super::{MidiDirection, StatusEvent};
 
 /// Number of update ticks a trigger animation stays active.
 ///
@@ -86,11 +87,28 @@ impl StatusState {
         match event {
             StatusEvent::Power(on) => self.power = on,
             StatusEvent::UsbConnected(on) => self.usb_connected = on,
-            StatusEvent::MidiUsbIn => self.arm(TRIG_MIDI_USB_IN, settings.midi_usb_in),
-            StatusEvent::MidiUsbOut => self.arm(TRIG_MIDI_USB_OUT, settings.midi_usb_out),
-            StatusEvent::MidiDinIn => self.arm(TRIG_MIDI_DIN_IN, settings.midi_din_in),
-            StatusEvent::MidiDinOut => self.arm(TRIG_MIDI_DIN_OUT, settings.midi_din_out),
-            StatusEvent::MidiExpression => self.arm(TRIG_MIDI_EXP, settings.midi_exp),
+            StatusEvent::Midi {
+                endpoint,
+                direction,
+                ..
+            } => {
+                let (slot, color) = match (endpoint, direction) {
+                    (MidiEndpoint::Usb, MidiDirection::In) => {
+                        (TRIG_MIDI_USB_IN, settings.midi_usb_in)
+                    }
+                    (MidiEndpoint::Usb, MidiDirection::Out) => {
+                        (TRIG_MIDI_USB_OUT, settings.midi_usb_out)
+                    }
+                    (MidiEndpoint::Din, MidiDirection::In) => {
+                        (TRIG_MIDI_DIN_IN, settings.midi_din_in)
+                    }
+                    (MidiEndpoint::Din, MidiDirection::Out) => {
+                        (TRIG_MIDI_DIN_OUT, settings.midi_din_out)
+                    }
+                    (MidiEndpoint::Expression, _) => (TRIG_MIDI_EXP, settings.midi_exp),
+                };
+                self.arm(slot, color);
+            }
             StatusEvent::SettingsUpdate => self.arm(TRIG_SETTINGS, settings.settings_update),
         }
     }
@@ -252,11 +270,26 @@ mod tests {
 
     // ---- StatusState::apply — trigger events ----
 
+    fn midi_cc() -> crate::midi::MidiMessage {
+        crate::midi::MidiMessage::ControlChange {
+            channel: 0,
+            control: 0,
+            value: 0,
+        }
+    }
+
     #[test]
     fn midi_usb_in_creates_flash() {
         let s = settings();
         let mut state = StatusState::new();
-        state.apply(StatusEvent::MidiUsbIn, &s);
+        state.apply(
+            StatusEvent::Midi {
+                endpoint: MidiEndpoint::Usb,
+                direction: MidiDirection::In,
+                message: midi_cc(),
+            },
+            &s,
+        );
         assert_eq!(state.color(&s), s.midi_usb_in);
     }
 
@@ -264,11 +297,31 @@ mod tests {
     fn all_trigger_events_are_handled() {
         let s = settings();
         let events = [
-            StatusEvent::MidiUsbIn,
-            StatusEvent::MidiUsbOut,
-            StatusEvent::MidiDinIn,
-            StatusEvent::MidiDinOut,
-            StatusEvent::MidiExpression,
+            StatusEvent::Midi {
+                endpoint: MidiEndpoint::Usb,
+                direction: MidiDirection::In,
+                message: midi_cc(),
+            },
+            StatusEvent::Midi {
+                endpoint: MidiEndpoint::Usb,
+                direction: MidiDirection::Out,
+                message: midi_cc(),
+            },
+            StatusEvent::Midi {
+                endpoint: MidiEndpoint::Din,
+                direction: MidiDirection::In,
+                message: midi_cc(),
+            },
+            StatusEvent::Midi {
+                endpoint: MidiEndpoint::Din,
+                direction: MidiDirection::Out,
+                message: midi_cc(),
+            },
+            StatusEvent::Midi {
+                endpoint: MidiEndpoint::Expression,
+                direction: MidiDirection::Out,
+                message: midi_cc(),
+            },
             StatusEvent::SettingsUpdate,
         ];
         for event in events {
@@ -288,7 +341,14 @@ mod tests {
     fn black_color_trigger_is_not_armed() {
         let s = black_settings();
         let mut state = StatusState::new();
-        state.apply(StatusEvent::MidiUsbIn, &s);
+        state.apply(
+            StatusEvent::Midi {
+                endpoint: MidiEndpoint::Usb,
+                direction: MidiDirection::In,
+                message: midi_cc(),
+            },
+            &s,
+        );
         assert_eq!(state.color(&s), Color::BLACK);
     }
 
@@ -306,7 +366,14 @@ mod tests {
     fn flash_expires_after_flash_ticks() {
         let s = settings();
         let mut state = StatusState::new();
-        state.apply(StatusEvent::MidiUsbIn, &s);
+        state.apply(
+            StatusEvent::Midi {
+                endpoint: MidiEndpoint::Usb,
+                direction: MidiDirection::In,
+                message: midi_cc(),
+            },
+            &s,
+        );
         for _ in 0..FLASH_TICKS {
             state.tick();
         }
@@ -328,13 +395,18 @@ mod tests {
     fn re_arming_resets_flash_timer() {
         let s = settings();
         let mut state = StatusState::new();
-        state.apply(StatusEvent::MidiUsbIn, &s);
+        let ev = StatusEvent::Midi {
+            endpoint: MidiEndpoint::Usb,
+            direction: MidiDirection::In,
+            message: midi_cc(),
+        };
+        state.apply(ev, &s);
         // Advance almost to expiry
         for _ in 0..FLASH_TICKS - 1 {
             state.tick();
         }
         // Re-arm
-        state.apply(StatusEvent::MidiUsbIn, &s);
+        state.apply(ev, &s);
         // Should still be active after the original would have expired
         for _ in 0..FLASH_TICKS - 1 {
             state.tick();
@@ -353,7 +425,14 @@ mod tests {
         let s = settings();
         let mut state = StatusState::new();
         state.apply(StatusEvent::Power(true), &s);
-        state.apply(StatusEvent::MidiUsbIn, &s);
+        state.apply(
+            StatusEvent::Midi {
+                endpoint: MidiEndpoint::Usb,
+                direction: MidiDirection::In,
+                message: midi_cc(),
+            },
+            &s,
+        );
         let expected = s.power.blend(s.midi_usb_in);
         assert_eq!(state.color(&s), expected);
     }

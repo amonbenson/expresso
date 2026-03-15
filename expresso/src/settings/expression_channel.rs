@@ -67,7 +67,7 @@ impl ExpressionChannelSettings {
 
     pub fn new(index: usize) -> Self {
         Self {
-            cc: index as u8,
+            cc: index as u8 + 1,
             ..Default::default()
         }
     }

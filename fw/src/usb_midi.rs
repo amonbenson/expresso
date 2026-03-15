@@ -18,6 +18,8 @@ use static_cell::StaticCell;
 
 use crate::collector::Collector;
 use crate::config::{FW_VERSION_MAJOR, FW_VERSION_MINOR, FW_VERSION_PATCH};
+use expresso::status::MidiDirection;
+
 use crate::types::{
     InMsgSender, MsgReceiver, SettingsMutex, StatusChannel, StatusEvent, StatusSubscriber,
 };
@@ -142,7 +144,11 @@ pub async fn io_task(
                 {
                     Either3::First(message) => {
                         if let Ok(p) = status_ch.dyn_publisher() {
-                            p.publish_immediate(StatusEvent::MidiUsbOut);
+                            p.publish_immediate(StatusEvent::Midi {
+                                endpoint: MidiEndpoint::Usb,
+                                direction: MidiDirection::Out,
+                                message,
+                            });
                         }
                         let mut buffer = PacketBuffer::<4>::new();
                         encoder.emit(&message, &mut buffer).ok();
@@ -180,7 +186,11 @@ pub async fn io_task(
                     match decoder.feed(packet) {
                         Some(DecodeResult::Message(msg)) => {
                             if let Ok(p) = status_ch.dyn_publisher() {
-                                p.publish_immediate(StatusEvent::MidiUsbIn);
+                                p.publish_immediate(StatusEvent::Midi {
+                                    endpoint: MidiEndpoint::Usb,
+                                    direction: MidiDirection::In,
+                                    message: msg,
+                                });
                             }
                             if to_router.try_send((msg, MidiEndpoint::Usb)).is_err() {
                                 warn!("USB MIDI RX: channel full, message dropped");

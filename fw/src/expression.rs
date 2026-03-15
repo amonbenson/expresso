@@ -3,6 +3,7 @@ use embassy_stm32::peripherals::{ADC1, ADC2};
 use embassy_time::{Duration, Timer};
 use expresso::expression::ExpressionGroup;
 use expresso::midi::{MidiEndpoint, MidiGenerator, MidiMessage, MidiSink};
+use expresso::status::MidiDirection;
 
 use crate::config::EXPRESSION_POLL_HZ;
 use crate::types::{InMsgSender, SettingsMutex, StatusChannel, StatusEvent};
@@ -22,7 +23,11 @@ impl MidiSink for ExpSink {
             .try_send((message, MidiEndpoint::Expression))
             .ok();
         if let Ok(p) = self.status.dyn_publisher() {
-            p.publish_immediate(StatusEvent::MidiExpression);
+            p.publish_immediate(StatusEvent::Midi {
+                endpoint: MidiEndpoint::Expression,
+                direction: MidiDirection::Out,
+                message,
+            });
         }
     }
 }

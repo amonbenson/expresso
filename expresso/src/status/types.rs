@@ -1,5 +1,14 @@
 use serde::{Deserialize, Serialize};
 
+use crate::midi::{MidiEndpoint, MidiMessage};
+
+/// Direction of a MIDI message relative to this device.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+pub enum MidiDirection {
+    In,
+    Out,
+}
+
 /// Events emitted by the various subsystems to report their current activity.
 ///
 /// Persistent events (`Power`, `UsbConnected`) represent ongoing states.
@@ -10,16 +19,12 @@ pub enum StatusEvent {
     Power(bool),
     /// USB host connected (`true`) or disconnected (`false`).
     UsbConnected(bool),
-    /// An incoming USB MIDI message was received.
-    MidiUsbIn,
-    /// An outgoing USB MIDI message was sent.
-    MidiUsbOut,
-    /// An incoming DIN MIDI message was received.
-    MidiDinIn,
-    /// An outgoing DIN MIDI message was sent.
-    MidiDinOut,
-    /// An expression pedal generated a MIDI message.
-    MidiExpression,
+    /// A MIDI message was sent or received on the given endpoint.
+    Midi {
+        endpoint: MidiEndpoint,
+        direction: MidiDirection,
+        message: MidiMessage,
+    },
     /// Settings were updated via SysEx.
     SettingsUpdate,
 }
