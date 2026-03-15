@@ -1,14 +1,19 @@
 /target
 /tmp
 
-<<<<<<< HEAD
-=======
 # AI stuff
 .claude/
 
->>>>>>> main
 # MacOS stuff
 .DS_Store
 __MACOSX/
 .AppleDouble
 .LSOverride
+
+# Renode test outputs
+log.html
+report.html
+output.xml
+robot_output.xml
+logs/
+snapshots/

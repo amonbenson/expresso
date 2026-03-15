@@ -1,0 +1,261 @@
+// STM32G431CBTx platform description for Renode
+//
+// CPU:    Cortex-M4F @ 170 MHz
+// Flash:  128 KB  @ 0x08000000
+// SRAM1:  16 KB   @ 0x20000000
+// SRAM2:  6 KB    @ 0x20004000
+// CCMRAM: 10 KB   @ 0x10000000 (ICODE bus alias)
+// CCMRAM: 10 KB   @ 0x20005800 (DCODE bus alias)
+//
+// Peripherals mapped to their RM0440 base addresses.
+// Peripherals without a dedicated Renode implementation use a
+// PythonPeripheral stub that acts as plain read/write storage
+// (with ready-bit emulation for RCC).
+//
+// IRQ numbers are the NVIC positions from RM0440 Table 62
+// (0-indexed from the first non-exception vector).
+
+// ---- Core ---------------------------------------------------------------
+
+nvic: IRQControllers.NVIC @ sysbus 0xE000E000
+    systickFrequency: 170000000
+    priorityMask: 0xF0
+
+cpu: CPU.CortexM @ sysbus
+    cpuType: "cortex-m4f"
+    nvic: nvic
+
+// ---- Memory -------------------------------------------------------------
+
+flash: Memory.MappedMemory @ sysbus 0x08000000
+    size: 0x20000           // 128 KB
+
+sram1: Memory.MappedMemory @ sysbus 0x20000000
+    size: 0x4000            // 16 KB
+
+sram2: Memory.MappedMemory @ sysbus 0x20004000
+    size: 0x1800            // 6 KB
+
+ccmramIcode: Memory.MappedMemory @ sysbus 0x10000000
+    size: 0x2800            // 10 KB – instruction bus alias
+
+ccmramDcode: Memory.MappedMemory @ sysbus 0x20005800
+    size: 0x2800            // 10 KB – data bus alias
+
+// ---- RCC ----------------------------------------------------------------
+// Mirrors oscillator/PLL enable bits to ready bits immediately so that
+// embassy-stm32's HSE/PLL polling loops terminate without blocking.
+// SW[1:0] in CFGR is mirrored to SWS[3:2] so the clock-switch check passes.
+
+rcc: Python.PythonPeripheral @ sysbus 0x40021000
+    size: 0x400
+    initable: true
+    script: '''
+if request.IsInit:
+    REGS = {0x00: (1 << 0) | (1 << 2)}
+
+if request.IsWrite:
+    val = request.Value
+    offset = request.Offset
+    if offset == 0x00:
+        if val & (1<<0):  val = val | (1<<2)
+        if val & (1<<16): val = val | (1<<17)
+        if val & (1<<24): val = val | (1<<25)
+    elif offset == 0x08:
+        sw = val & 0x3
+        val = (val & ~0xC) | (sw << 2)
+    REGS[offset] = val
+
+if request.IsRead:
+    val = REGS.get(request.Offset, 0)
+    if request.Offset == 0x00:
+        if val & (1<<0):  val = val | (1<<2)
+        if val & (1<<16): val = val | (1<<17)
+        if val & (1<<24): val = val | (1<<25)
+    elif request.Offset == 0x08:
+        sw = val & 0x3
+        val = (val & ~0xC) | (sw << 2)
+    request.Value = val
+'''
+
+// ---- Flash controller stub ----------------------------------------------
+// embassy-stm32 configures wait states via FLASH_ACR and reads them back.
+
+flashCtrl: Python.PythonPeripheral @ sysbus 0x40022000
+    size: 0x400
+    initable: true
+    script: '''
+if request.IsInit:
+    REGS = {}
+if request.IsRead:
+    request.Value = REGS.get(request.Offset, 0)
+if request.IsWrite:
+    REGS[request.Offset] = request.Value
+'''
+
+// ---- Power / System Configuration stubs ---------------------------------
+
+pwr: Python.PythonPeripheral @ sysbus 0x40007000
+    size: 0x400
+    initable: true
+    script: '''
+if request.IsInit:
+    REGS = {}
+if request.IsRead:
+    request.Value = REGS.get(request.Offset, 0)
+if request.IsWrite:
+    REGS[request.Offset] = request.Value
+'''
+
+syscfg: Python.PythonPeripheral @ sysbus 0x40010000
+    size: 0x400
+    initable: true
+    script: '''
+if request.IsInit:
+    REGS = {}
+if request.IsRead:
+    request.Value = REGS.get(request.Offset, 0)
+if request.IsWrite:
+    REGS[request.Offset] = request.Value
+'''
+
+// ---- EXTI stub ----------------------------------------------------------
+// The STM32G4 EXTI has a different register layout from STM32F4, so we use
+// a plain stub rather than IRQControllers.STM32F4_EXTI.
+
+exti: Python.PythonPeripheral @ sysbus 0x40010400
+    size: 0x400
+    initable: true
+    script: '''
+if request.IsInit:
+    REGS = {}
+if request.IsRead:
+    request.Value = REGS.get(request.Offset, 0)
+if request.IsWrite:
+    REGS[request.Offset] = request.Value
+'''
+
+// ---- GPIO ---------------------------------------------------------------
+// modeResetValue matches the RM0440 reset values for GPIOA/GPIOB
+// (debug pins PA13/PA14/PA15 default to AF mode).
+// Pins used by firmware:
+//   PA0–PA7  : ADC1/ADC2 (expression pedals)
+//   PA11/PA12: USB D− / D+
+//   PB0      : TIM3 CH3 (LED blue)
+//   PB4      : TIM3 CH1 (LED red)
+//   PB5      : TIM3 CH2 (LED green)
+//   PB6      : USART1 TX
+
+gpioA: GPIOPort.STM32_GPIOPort @ sysbus <0x48000000, +0x400>
+    modeResetValue: 0xABFFFFFF
+    numberOfAFs: 16
+
+gpioB: GPIOPort.STM32_GPIOPort @ sysbus <0x48000400, +0x400>
+    modeResetValue: 0xFFFFFEBF
+    numberOfAFs: 16
+
+// ---- USART1 (DIN MIDI @ 31250 baud) ------------------------------------
+// IRQ 37 = USART1
+
+usart1: UART.STM32_UART @ sysbus <0x40013800, +0x400>
+    frequency: 170000000
+    IRQ -> nvic@37
+
+// ---- Timers -------------------------------------------------------------
+// TIM2 (32-bit) is the embassy-time driver (feature = "time-driver-tim2").
+// TIM3 (16-bit) drives the status LED via PWM on channels CH1–CH3.
+// IRQ 28 = TIM2,  IRQ 29 = TIM3
+
+tim2: Timers.STM32_Timer @ sysbus <0x40000000, +0x400>
+    frequency: 170000000
+    initialLimit: 0xFFFFFFFF
+    -> nvic@28
+
+tim3: Timers.STM32_Timer @ sysbus <0x40000400, +0x400>
+    frequency: 170000000
+    initialLimit: 0xFFFF
+    -> nvic@29
+
+// ---- DMA1 stub ----------------------------------------------------------
+// Used by USART1 (channels 4 and 5).
+// Stubbed because the STM32G4 uses a channel-based DMA controller with a
+// different register layout from the stream-based DMA in STM32F4.
+
+dma1: Python.PythonPeripheral @ sysbus 0x40020000
+    size: 0x400
+    initable: true
+    script: '''
+if request.IsInit:
+    REGS = {}
+if request.IsRead:
+    request.Value = REGS.get(request.Offset, 0)
+if request.IsWrite:
+    REGS[request.Offset] = request.Value
+'''
+
+// ---- DMAMUX1 stub -------------------------------------------------------
+// Routes DMA requests to DMA1 channels.
+
+dmamux1: Python.PythonPeripheral @ sysbus 0x40020800
+    size: 0x400
+    initable: true
+    script: '''
+if request.IsInit:
+    REGS = {}
+if request.IsRead:
+    request.Value = REGS.get(request.Offset, 0)
+if request.IsWrite:
+    REGS[request.Offset] = request.Value
+'''
+
+// ---- ADC1 / ADC2 / ADC12_COMMON stubs ----------------------------------
+// ADC1 @ 0x50000000, ADC2 @ 0x50000100, ADC12_COMMON @ 0x50000300.
+// Covered by a single stub spanning the whole 0x400-byte region.
+// Returns ADRDY=1, EOC=1, EOS=1 in ISR and ADEN=1 in CR so that
+// embassy-stm32's calibration/enable polling loops terminate immediately.
+
+adc12: Python.PythonPeripheral @ sysbus 0x50000000
+    size: 0x400
+    initable: true
+    script: '''
+if request.IsInit:
+    REGS = {}
+
+if request.IsRead:
+    offset = request.Offset
+    local_offset = offset & 0xFF
+    is_adc = offset < 0x300
+    if is_adc and local_offset == 0x00:
+        request.Value = (1<<0) | (1<<2) | (1<<3)
+    elif is_adc and local_offset == 0x08:
+        request.Value = (1<<0)
+    elif is_adc and local_offset == 0x40:
+        request.Value = 0x0800
+    else:
+        request.Value = REGS.get(offset, 0)
+
+if request.IsWrite:
+    REGS[request.Offset] = request.Value
+'''
+
+// ---- USB FS -------------------------------------------------------------
+// STM32G431 uses an APB-based USB FS controller (same IP as STM32F072).
+// No dedicated Renode peripheral exists for this version, so both the
+// register bank and the packet memory area (PMA) are stubbed.
+// The USB task will initialise but never connect — that is fine for a
+// boot smoke-test.  USB_LP = IRQ 20.
+
+usbSram: Memory.MappedMemory @ sysbus 0x40006000
+    size: 0x400             // 1 KB USB packet memory area (PMA)
+
+usb: Python.PythonPeripheral @ sysbus 0x40005C00
+    size: 0x400
+    initable: true
+    script: '''
+if request.IsInit:
+    REGS = {}
+if request.IsRead:
+    request.Value = REGS.get(request.Offset, 0)
+if request.IsWrite:
+    REGS[request.Offset] = request.Value
+'''

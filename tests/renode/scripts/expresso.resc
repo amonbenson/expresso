@@ -1,0 +1,29 @@
+:name: Expresso
+:description: Expresso firmware interactive simulation script.
+:           : Load this script in the Renode monitor with:
+:           :   i @tests/renode/scripts/expresso.resc
+:           : or override the ELF path:
+:           :   $bin=@/path/to/expresso-fw.elf i @tests/renode/scripts/expresso.resc
+
+using sysbus
+
+# Default ELF path – points to the release build from the workspace root.
+# Override by setting $bin before sourcing this script.
+$bin ?= @target/thumbv7em-none-eabihf/release/expresso-fw.elf
+
+$name ?= "expresso"
+mach create $name
+
+machine LoadPlatformDescription @tests/renode/platforms/stm32g431cb.repl
+
+# Open a terminal window for USART1 (DIN MIDI physical layer).
+# In a headless / CI run this can be omitted; the Robot test uses
+# CreateTerminalTester instead.
+showAnalyzer sysbus.usart1
+
+macro reset
+"""
+    sysbus LoadELF $bin
+"""
+
+runMacro $reset
