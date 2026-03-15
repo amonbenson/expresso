@@ -54,13 +54,12 @@ jobs:
         with:
           targets: thumbv7em-none-eabihf
       - uses: Swatinem/rust-cache@v2
-      - name: Install Renode
-        run: |
-          wget -q https://github.com/renode/renode/releases/download/v1.16.1/renode-1.16.1.linux-portable.tar.gz
-          sudo tar -xzf renode-1.16.1.linux-portable.tar.gz -C /opt
-          RENODE_DIR=$(echo /opt/renode*)
-          sudo ln -s "$RENODE_DIR/renode" "$RENODE_DIR/Renode.exe"
-          echo "RENODE_DIR=$RENODE_DIR" >> $GITHUB_ENV
-      - name: Install robotframework
-        run: pip install -r $RENODE_DIR/tests/requirements.txt
-      - run: cargo test-fw
+      - name: Build firmware
+        run: cargo build-fw
+      - name: Copy ELF with .elf extension
+        run: cp target/thumbv7em-none-eabihf/release/expresso-fw target/thumbv7em-none-eabihf/release/expresso-fw.elf
+      - uses: antmicro/renode-test-action@v5
+        with:
+          renode-revision: v1.16.1
+          tests-to-run: tests/renode/tests/*.robot
+          artifacts-path: target/renode-results
