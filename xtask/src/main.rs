@@ -15,6 +15,7 @@ enum Task {
     BuildAll(BuildAll),
     TestAll(TestAll),
     FlashFw(FlashFw),
+    TestFw(TestFw),
     RunSw(RunSw),
     Cubemx(Cubemx),
 }
@@ -39,6 +40,11 @@ struct TestAll {}
 #[argh(subcommand, name = "flash-fw")]
 struct FlashFw {}
 
+/// Build firmware and run Renode integration tests.
+#[derive(argh::FromArgs)]
+#[argh(subcommand, name = "test-fw")]
+struct TestFw {}
+
 /// Run desktop software in development mode (npm run tauri dev).
 #[derive(argh::FromArgs)]
 #[argh(subcommand, name = "run-sw")]
@@ -56,6 +62,7 @@ fn main() {
         Task::BuildAll(_) => build_all(),
         Task::TestAll(_) => test_all(),
         Task::FlashFw(_) => flash_fw(),
+        Task::TestFw(_) => test_fw(),
         Task::RunSw(_) => run_sw(),
         Task::Cubemx(_) => open_cubemx(),
     }
@@ -76,6 +83,163 @@ fn check_all() {
 fn test_all() {
     cargo(&["test-lib"]);
     cargo(&["test-sw"]);
+    cargo(&["test-fw"]);
+}
+
+fn test_fw() {
+    // Build firmware ELF first.
+    cargo(&["build-fw"]);
+
+    let root = workspace_root();
+
+    // STM32CubeProgrammer (and Renode) require a recognised .elf extension.
+    let elf_src = root.join("target/thumbv7em-none-eabihf/release/expresso-fw");
+    let elf = root.join("target/thumbv7em-none-eabihf/release/expresso-fw.elf");
+    std::fs::copy(&elf_src, &elf).expect("failed to copy ELF to .elf");
+
+    let renode_dir = find_renode();
+    let python = find_python();
+    let run_tests = renode_dir.join("tests/run_tests.py");
+    let css = renode_dir.join("tests/robot.css");
+
+    // Write results into target/ so they are covered by the root .gitignore.
+    let results_dir = root.join("target/renode-results");
+    std::fs::create_dir_all(&results_dir).expect("failed to create renode-results dir");
+
+    let robot_tests_dir = root.join("tests/renode/tests");
+
+    // Collect all .robot files; run_tests.py needs explicit file paths, not a directory.
+    let mut robot_files: Vec<PathBuf> = std::fs::read_dir(&robot_tests_dir)
+        .unwrap_or_else(|e| panic!("cannot read {}: {e}", robot_tests_dir.display()))
+        .filter_map(|e| e.ok())
+        .map(|e| e.path())
+        .filter(|p| p.extension().and_then(|e| e.to_str()) == Some("robot"))
+        .collect();
+    robot_files.sort();
+
+    if robot_files.is_empty() {
+        eprintln!("error: no .robot files found in {}", robot_tests_dir.display());
+        std::process::exit(1);
+    }
+
+    eprintln!("Running {} Renode test file(s) ...", robot_files.len());
+
+    let status = Command::new(&python)
+        .env("PYTHONIOENCODING", "utf-8")
+        .arg(&run_tests)
+        .arg("--css-file")
+        .arg(&css)
+        .arg("--robot-framework-remote-server-full-directory")
+        .arg(&renode_dir)
+        .arg("-r")
+        .arg(&results_dir)
+        .args(&robot_files)
+        .current_dir(&root)
+        .status()
+        .unwrap_or_else(|e| panic!("failed to run {}: {e}", python.display()));
+
+    if !status.success() {
+        eprintln!("Renode tests failed! Results in {}", results_dir.display());
+        std::process::exit(status.code().unwrap_or(1));
+    }
+}
+
+/// Locate the Renode installation directory (the one containing `tests/run_tests.py`).
+///
+/// Search order:
+///   1. `RENODE_DIR` environment variable (CI override).
+///   2. Known install locations for the current OS.
+fn find_renode() -> PathBuf {
+    if let Ok(dir) = std::env::var("RENODE_DIR") {
+        let p = PathBuf::from(dir);
+        if p.join("tests/run_tests.py").exists() {
+            return p;
+        }
+        eprintln!("warning: RENODE_DIR set but tests/run_tests.py not found there");
+    }
+
+    let candidates: &[&str] = if cfg!(windows) {
+        &[r"C:\Program Files\Renode"]
+    } else if cfg!(target_os = "macos") {
+        &["/Applications/Renode.app/Contents/MacOS"]
+    } else {
+        &["/opt/renode", "/usr/lib/renode"]
+    };
+
+    for path in candidates {
+        let p = PathBuf::from(path);
+        if p.join("tests/run_tests.py").exists() {
+            return p;
+        }
+    }
+
+    eprintln!("error: Renode not found.");
+    eprintln!(
+        "Install Renode from https://renode.io or set RENODE_DIR to the installation directory."
+    );
+    std::process::exit(1);
+}
+
+/// Locate a Python 3 interpreter that has `robotframework` installed.
+///
+/// Search order:
+///   1. `RENODE_PYTHON` environment variable (CI override).
+///   2. `python3` / `python` on PATH (Linux / macOS).
+///   3. Known Miniconda / Anaconda / CPython install paths (Windows).
+fn find_python() -> PathBuf {
+    if let Ok(py) = std::env::var("RENODE_PYTHON") {
+        return PathBuf::from(py);
+    }
+
+    if !cfg!(windows) {
+        for bin in ["python3", "python"] {
+            if which(bin).is_some() {
+                return PathBuf::from(bin);
+            }
+        }
+        eprintln!("error: Python 3 not found. Install Python 3 and robotframework.");
+        std::process::exit(1);
+    }
+
+    // Windows: prefer PATH, but skip the Windows Store stub
+    // (C:\Users\…\AppData\Local\Microsoft\WindowsApps\python.exe) which just
+    // opens the Microsoft Store instead of running Python.
+    if let Some(p) = which("python.exe") {
+        let path_str = p.to_string_lossy().to_lowercase();
+        if !path_str.contains("windowsapps") {
+            return PathBuf::from("python.exe");
+        }
+    }
+
+    // User-profile conda installs.
+    if let Ok(profile) = std::env::var("USERPROFILE") {
+        for subdir in ["miniconda3", "Miniconda3", "anaconda3", "Anaconda3"] {
+            let p = PathBuf::from(&profile).join(subdir).join("python.exe");
+            if p.exists() {
+                return p;
+            }
+        }
+    }
+
+    // System-wide conda installs.
+    for path in &[
+        r"C:\ProgramData\miniconda3\python.exe",
+        r"C:\ProgramData\Miniconda3\python.exe",
+        r"C:\ProgramData\anaconda3\python.exe",
+        r"C:\Python313\python.exe",
+        r"C:\Python312\python.exe",
+        r"C:\Python311\python.exe",
+        r"C:\Python310\python.exe",
+    ] {
+        let p = PathBuf::from(path);
+        if p.exists() {
+            return p;
+        }
+    }
+
+    eprintln!("error: Python not found.");
+    eprintln!("Install Python 3 (or set RENODE_PYTHON) and run: pip install robotframework");
+    std::process::exit(1);
 }
 
 fn run_sw() {

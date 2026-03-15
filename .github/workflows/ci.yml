@@ -44,3 +44,20 @@ jobs:
             libayatana-appindicator3-dev \
             librsvg2-dev
       - run: cargo test-sw
+
+  test-fw:
+    name: Test firmware (Renode)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: thumbv7em-none-eabihf
+      - uses: Swatinem/rust-cache@v2
+      - name: Install Renode
+        run: |
+          wget -q https://github.com/renode/renode/releases/download/v1.15.3/renode_1.15.3_amd64.deb
+          sudo apt-get install -y ./renode_1.15.3_amd64.deb
+      - name: Install robotframework
+        run: pip install robotframework==7.0
+      - run: cargo test-fw

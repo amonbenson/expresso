@@ -8,6 +8,7 @@ test-lib = ["test",  "-p", "expresso"]
 check-fw = ["check", "-p", "expresso-fw", "--target", "thumbv7em-none-eabihf", "--release"]
 build-fw = ["build", "-p", "expresso-fw", "--target", "thumbv7em-none-eabihf", "--release"]
 flash-fw = ["run", "-p", "xtask", "--", "flash-fw"]
+test-fw  = ["run", "-p", "xtask", "--", "test-fw"]
 
 # Desktop software (run via Tauri)
 check-sw = ["check", "-p", "expresso-sw"]
