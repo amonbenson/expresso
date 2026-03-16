@@ -55,3 +55,22 @@ jobs:
           renode-revision: v1.16.1
           tests-to-run: tests/renode/tests/*.robot
           artifacts-path: target/renode-results
+
+  coverage:
+    name: Coverage
+    runs-on: ubuntu-latest
+    needs: test-lib
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Install cargo-tarpaulin
+        run: cargo install cargo-tarpaulin --locked
+      - name: Generate coverage
+        run: cargo tarpaulin --package expresso-lib --all-features --timeout 120 --out xml
+      - name: Upload to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: cobertura.xml
+          fail_ci_if_error: true
