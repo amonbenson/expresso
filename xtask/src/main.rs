@@ -118,7 +118,10 @@ fn test_fw() {
     robot_files.sort();
 
     if robot_files.is_empty() {
-        eprintln!("error: no .robot files found in {}", robot_tests_dir.display());
+        eprintln!(
+            "error: no .robot files found in {}",
+            robot_tests_dir.display()
+        );
         std::process::exit(1);
     }
 

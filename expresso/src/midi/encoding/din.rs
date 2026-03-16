@@ -169,6 +169,12 @@ impl<const SYSEX_N: usize> MidiDecoder for DinMidiDecoder<SYSEX_N> {
 
     fn feed(&mut self, byte: u8) -> Option<DecodeResult<'_>> {
         if byte & 0x80 != 0 {
+            // Real-time messages (0xF8–0xFF: Clock, Start, Continue, Stop,
+            // Active Sense, Reset) are single-byte and transparent to the
+            // running-status state machine — pass through without side effects.
+            if byte >= 0xF8 {
+                return None;
+            }
             if byte == 0xF0 {
                 self.in_sysex = true;
                 self.sysex_len = 0;
@@ -477,6 +483,82 @@ mod tests {
                     ..
                 }
             ));
+        }
+
+        #[test]
+        fn realtime_between_data_bytes_is_transparent() {
+            // 0xF8 (MIDI Clock) arriving between note and velocity must not
+            // corrupt the state machine — the NoteOn should still complete.
+            let mut decoder = DinMidiDecoder::<0>::new();
+            assert!(decoder.feed(0x90).is_none()); // NoteOn status
+            assert!(decoder.feed(60).is_none()); // note byte
+            assert!(decoder.feed(0xF8).is_none()); // MIDI Clock (real-time)
+            let msg = match decoder.feed(100) {
+                // velocity byte
+                Some(DecodeResult::Message(m)) => m,
+                _ => panic!("expected NoteOn after real-time byte"),
+            };
+            assert!(matches!(
+                msg,
+                MidiMessage::NoteOn {
+                    channel: 0,
+                    note: 60,
+                    velocity: 100
+                }
+            ));
+        }
+
+        #[test]
+        fn realtime_between_running_status_messages_is_transparent() {
+            // Real-time byte between running-status NoteOn messages must not
+            // reset the running status or corrupt either message.
+            let mut decoder = DinMidiDecoder::<0>::new();
+            let msg1 = feed_message(&mut decoder, &[0x90, 60, 100]).unwrap();
+            assert!(matches!(
+                msg1,
+                MidiMessage::NoteOn {
+                    note: 60,
+                    velocity: 100,
+                    ..
+                }
+            ));
+            // 0xFE (Active Sense) arrives before the second note byte
+            assert!(decoder.feed(0xFE).is_none());
+            let msg2 = feed_message(&mut decoder, &[64, 80]).unwrap();
+            assert!(matches!(
+                msg2,
+                MidiMessage::NoteOn {
+                    note: 64,
+                    velocity: 80,
+                    ..
+                }
+            ));
+        }
+
+        #[test]
+        fn all_realtime_bytes_are_transparent() {
+            // Every real-time status byte must be ignored without side effects.
+            for rt in [0xF8u8, 0xFA, 0xFB, 0xFC, 0xFE, 0xFF] {
+                let mut decoder = DinMidiDecoder::<0>::new();
+                assert!(decoder.feed(0x90).is_none());
+                assert!(decoder.feed(60).is_none());
+                assert!(
+                    decoder.feed(rt).is_none(),
+                    "real-time {rt:#04x} should return None"
+                );
+                let msg = feed_message(&mut decoder, &[100]).unwrap();
+                assert!(
+                    matches!(
+                        msg,
+                        MidiMessage::NoteOn {
+                            note: 60,
+                            velocity: 100,
+                            ..
+                        }
+                    ),
+                    "NoteOn corrupted after real-time byte {rt:#04x}"
+                );
+            }
         }
 
         #[test]
