@@ -67,7 +67,7 @@ jobs:
       - name: Install cargo-tarpaulin
         run: cargo install cargo-tarpaulin --locked
       - name: Generate coverage
-        run: cargo tarpaulin --package expresso --all-features --timeout 120 --out xml
+        run: cargo tarpaulin --package expresso --timeout 120 --out xml
       - name: Upload to Codecov
         uses: codecov/codecov-action@v5
         with:
