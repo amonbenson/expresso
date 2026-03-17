@@ -3628,6 +3628,15 @@
 				(hide yes)
 			)
 		)
+		(property "LCSC" "C554579"
+			(at 71.9933 116.84 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
 		(pin "3"
 			(uuid "d9f507e2-0729-4bcd-875a-a9b512a0c378")
 		)

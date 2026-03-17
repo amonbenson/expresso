@@ -7403,6 +7403,15 @@
 				(hide yes)
 			)
 		)
+		(property "LCSC" "C4190"
+			(at 58.42 153.67 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
 		(pin "2"
 			(uuid "367cd8c1-6907-4fc7-bd43-d56ef2912694")
 		)
@@ -7844,6 +7853,15 @@
 		)
 		(property "Description" "Resistor"
 			(at 58.42 170.18 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "LCSC" "C23228"
+			(at 58.42 173.99 0)
 			(effects
 				(font
 					(size 1.27 1.27)

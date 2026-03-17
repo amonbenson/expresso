@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg id="LaserOn_Outlines" data-name="LaserOn Outlines" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 309.52 289.587">
+  <defs>
+    <style>
+      .cls-1 {
+        stroke-miterlimit: 10;
+      }
+
+      .cls-1, .cls-2 {
+        fill: none;
+        stroke: #000;
+      }
+
+      .cls-2 {
+        stroke-linecap: round;
+        stroke-linejoin: round;
+        stroke-width: .01px;
+      }
+    </style>
+  </defs>
+  <rect class="cls-2" x="33.579" y="162.023" width="275.936" height="127.559" rx="14.173" ry="14.173"/>
+  <circle class="cls-2" cx="264.124" cy="232.889" r="7.087"/>
+  <circle class="cls-2" cx="200.007" cy="232.889" r="22.11"/>
+  <circle class="cls-2" cx="143.087" cy="232.889" r="22.11"/>
+  <circle class="cls-2" cx="201.75" cy="105.33" r="15.732"/>
+  <circle class="cls-2" cx="141.27" cy="105.33" r="15.732"/>
+  <circle class="cls-2" cx="262.267" cy="105.33" r="15.732"/>
+  <circle class="cls-2" cx="80.864" cy="105.33" r="15.732"/>
+  <rect class="cls-2" x="33.579" y="28.794" width="275.936" height="127.559" rx="14.173" ry="14.173"/>
+  <rect class="cls-2" x="65.803" y="250.464" width="30.047" height="11.622" rx="4.252" ry="4.252"/>
+  <g id="CIRCLE">
+    <circle class="cls-2" cx="47.752" cy="275.408" r="3.118"/>
+  </g>
+  <g id="CIRCLE-2" data-name="CIRCLE">
+    <circle class="cls-2" cx="47.752" cy="176.196" r="3.118"/>
+  </g>
+  <g id="CIRCLE-3" data-name="CIRCLE">
+    <circle class="cls-2" cx="295.341" cy="275.408" r="3.118"/>
+  </g>
+  <g id="CIRCLE-4" data-name="CIRCLE">
+    <circle class="cls-2" cx="295.341" cy="176.196" r="3.118"/>
+  </g>
+  <g id="CIRCLE-5" data-name="CIRCLE">
+    <circle class="cls-2" cx="295.341" cy="142.18" r="3.118"/>
+  </g>
+  <g id="CIRCLE-6" data-name="CIRCLE">
+    <circle class="cls-2" cx="295.341" cy="42.967" r="3.118"/>
+  </g>
+  <g id="CIRCLE-7" data-name="CIRCLE">
+    <circle class="cls-2" cx="47.752" cy="42.967" r="3.118"/>
+  </g>
+  <g id="CIRCLE-8" data-name="CIRCLE">
+    <circle class="cls-2" cx="47.752" cy="142.18" r="3.118"/>
+  </g>
+  <line class="cls-1" x1=".354" y1=".354" x2="13.163" y2="13.163"/>
+</svg>
