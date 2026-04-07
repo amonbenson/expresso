@@ -4,9 +4,9 @@ use crate::settings::ExpressionChannelSettingsPatch;
 
 #[derive(Default, Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub enum InputMode {
+    #[default]
     Continuous,
     Switch,
-    #[default]
     Compat,
 }
 
