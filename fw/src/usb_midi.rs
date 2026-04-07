@@ -1,5 +1,7 @@
 use defmt::{info, warn};
 use embassy_futures::select::{Either, Either3, select, select3};
+use embassy_stm32::flash::{Blocking, Flash};
+use embassy_stm32::peripherals::FLASH;
 use embassy_stm32::usb::Driver;
 use embassy_stm32::{Peri, peripherals};
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
@@ -18,6 +20,7 @@ use static_cell::StaticCell;
 
 use crate::collector::Collector;
 use crate::config::{FW_VERSION_MAJOR, FW_VERSION_MINOR, FW_VERSION_PATCH};
+use crate::flash_store;
 use expresso::status::MidiDirection;
 
 use crate::types::{
@@ -107,6 +110,7 @@ pub async fn device_task(mut usb: StaticDevice) -> ! {
 #[embassy_executor::task]
 pub async fn io_task(
     midi: UsbMidi,
+    flash: Peri<'static, FLASH>,
     from_router: MsgReceiver,
     to_router: InMsgSender,
     settings: &'static SettingsMutex,
@@ -114,6 +118,8 @@ pub async fn io_task(
     mut status_sub: StatusSubscriber,
 ) {
     info!("USB MIDI IO task started");
+
+    let mut flash = Flash::new_blocking(flash);
 
     static SYSEX_CH: StaticCell<SysexChannel> = StaticCell::new();
     let sysex_ch = SYSEX_CH.init(Channel::new());
@@ -206,6 +212,9 @@ pub async fn io_task(
                                     if let Ok(p) = status_ch.dyn_publisher() {
                                         p.publish_immediate(StatusEvent::SettingsUpdate);
                                     }
+                                    settings.lock(|s| {
+                                        flash_store::save(&mut flash, &s.borrow());
+                                    });
                                 }
                                 if sysex_tx.try_send(response).is_err() {
                                     warn!("SysEx: response channel full");

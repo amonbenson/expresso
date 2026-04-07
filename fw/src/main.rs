@@ -5,6 +5,7 @@ pub mod collector;
 mod config;
 mod din_midi;
 mod expression;
+mod flash_store;
 mod router;
 mod status_led;
 pub mod types;
@@ -86,7 +87,8 @@ async fn main(spawner: Spawner) {
     let p = embassy_stm32::init(config);
 
     static SETTINGS: StaticCell<SettingsMutex> = StaticCell::new();
-    let settings = SETTINGS.init(Mutex::new(RefCell::new(Settings::default())));
+    let initial_settings = flash_store::load().unwrap_or_default();
+    let settings = SETTINGS.init(Mutex::new(RefCell::new(initial_settings)));
 
     // Create the two subscribers before spawning tasks that need them.
     let led_sub = STATUS_CHANNEL.subscriber().unwrap();
@@ -111,6 +113,7 @@ async fn main(spawner: Spawner) {
     spawner
         .spawn(usb_midi::io_task(
             midi_class,
+            p.FLASH,
             ROUTER_TO_USB.receiver(),
             TO_ROUTER.sender(),
             settings,

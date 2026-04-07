@@ -1541,6 +1541,7 @@ dependencies = [
  "embassy-usb",
  "expresso",
  "panic-probe",
+ "postcard",
  "static_cell",
 ]
 

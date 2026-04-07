@@ -4,8 +4,8 @@ use std::time::Duration;
 
 use expresso::settings::{Settings, SettingsPatch};
 use expresso::sysex::{
-    codec_7bit, MAX_SETTINGS_BYTES, SYSEX_CMD_SETTINGS_GET, SYSEX_CMD_SETTINGS_PATCH, SYSEX_MAGIC,
-    SYSEX_MFID, SYSEX_RESPONSE_BIT,
+    codec_7bit, MAX_SETTINGS_BYTES, SYSEX_CMD_SETTINGS_GET, SYSEX_CMD_SETTINGS_PATCH,
+    SYSEX_CMD_STATUS, SYSEX_MAGIC, SYSEX_MFID, SYSEX_RESPONSE_BIT,
 };
 use midir::{MidiInput, MidiInputConnection, MidiOutput, MidiOutputConnection};
 use serde::Serialize;
@@ -209,7 +209,7 @@ async fn midi_loop(
                             "[midi] Ignoring SysEx cmd=0x{cmd:02X}, still waiting for 0x{expected:02X}"
                         );
                     }
-                } else {
+                } else if raw[6] != (SYSEX_CMD_STATUS | SYSEX_RESPONSE_BIT) {
                     eprintln!("[midi] Ignoring unsolicited SysEx cmd=0x{:02X}", raw[6]);
                 }
             }
