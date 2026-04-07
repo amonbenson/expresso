@@ -26,6 +26,10 @@ impl ExpressionChannel {
 
     const DRIVE_FACTOR: f32 = 5.0;
 
+    /// Minimum change in the normalised input (0..1) required before an update is processed.
+    /// Changes smaller than this are ignored, filtering out noise and tiny fluctuations.
+    const MIN_INPUT_DELTA: f32 = 0.005;
+
     pub fn from_index(index: usize) -> Self {
         Self {
             index,
@@ -116,13 +120,20 @@ where
         let r_total = r_tip_ring + r_ring_sleeve;
 
         // Calculate the new input value
-        self.previous_input = self.current_input;
-        self.current_input = match settings.input.mode {
+        let new_input = match settings.input.mode {
             InputMode::Continuous => r_ring_sleeve / r_total,
             InputMode::Switch => (r_total >= Self::R_THRESH) as u32 as f32,
             InputMode::Compat => v_ring / 3.3,
         }
         .clamp(0.0, 1.0);
+
+        // Ignore changes smaller than the minimum delta to suppress noise
+        if (new_input - self.current_input).abs() < Self::MIN_INPUT_DELTA {
+            return Ok(());
+        }
+
+        self.previous_input = self.current_input;
+        self.current_input = new_input;
 
         // Apply value transformations. This will also convert the input range 0..1 to MIDI range 0..127
         self.previous_output = self.current_output;
