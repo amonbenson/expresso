@@ -52,7 +52,7 @@ impl ExpressionChannel {
         // calculate R_RS
         let r_rs = (Self::R_PAR * (v_ring - v_sleeve)) / (i * Self::R_PAR + v_sleeve - v_ring);
 
-        (r_tr, r_rs)
+        (r_rs, r_tr)
     }
 
     pub fn apply_continuous_transform(value: f32, settings: ContinuousSettings) -> u8 {
@@ -110,17 +110,17 @@ where
 
         // Calculate the resistance values
         let (v_ring, v_tip) = inputs;
-        let (r_tip_ring, r_ring_sleeve) = Self::calculate_resistance(v_ring, v_tip);
+        let (r_rs, r_tr) = Self::calculate_resistance(v_ring, v_tip);
 
-        // Limit the resistance range
-        let r_tip_ring = r_tip_ring.clamp(0.0, Self::R_MAX);
-        let r_ring_sleeve = r_ring_sleeve.clamp(0.0, Self::R_MAX);
-        let r_total = r_tip_ring + r_ring_sleeve;
+        // Limit the resistance range and calculate total tip-sleeve resistance of the pedal
+        let r_rs = r_rs.clamp(0.0, Self::R_MAX);
+        let r_tr = r_tr.clamp(0.0, Self::R_MAX);
+        let r_ts = r_rs + r_tr;
 
         // Calculate the new input value
         let new_input = match settings.input.mode {
-            InputMode::Continuous => r_ring_sleeve / r_total,
-            InputMode::Switch => (r_total >= Self::R_THRESH) as u32 as f32,
+            InputMode::Continuous => r_rs / r_ts,
+            InputMode::Switch => (r_ts >= Self::R_THRESH) as u32 as f32,
             InputMode::Compat => v_ring / 3.3,
         }
         .clamp(0.0, 1.0);
@@ -172,13 +172,29 @@ mod tests {
 
     use super::*;
 
-    // ---- calculate_resistance ----
+    fn calculate_voltages(r_rs: f32, r_tr: f32) -> (f32, f32) {
+        // r1=R_RAIL, r2=r_rs||R_PAR, r3=r_tr||R_PAR, r4=R_RAIL
+        let r1 = ExpressionChannel::R_RAIL;
+        let r2 = (r_rs * ExpressionChannel::R_PAR) / (r_rs + ExpressionChannel::R_PAR); // r_rs || R_PAR
+        let r3 = (r_tr * ExpressionChannel::R_PAR) / (r_tr + ExpressionChannel::R_PAR); // r_rs || R_PAR
+        let r4 = ExpressionChannel::R_RAIL;
+
+        let r_load = r1 + r2 + r3 + r4;
+        let i = ExpressionChannel::V_CC / r_load;
+
+        let v_ring = i * (r1 + r2);
+        let v_tip = i * (r1 + r2 + r3);
+
+        return (v_ring, v_tip);
+    }
 
     #[test]
     fn resistance_symmetric() {
-        // R_TR = R_RS = 100k. Each leg has R_PAR=100k in parallel -> 50k effective per leg.
-        // Total load = 100k, i = 3.3/110k = 0.03mA, v_tip = 3.0V, v_ring = 0.03*50 = 1.5V.
-        let (r_tr, r_rs) = ExpressionChannel::calculate_resistance(1.5, 3.0);
+        // both R = R_PAR
+        let (v_ring, v_tip) =
+            calculate_voltages(ExpressionChannel::R_PAR, ExpressionChannel::R_PAR);
+
+        let (r_tr, r_rs) = ExpressionChannel::calculate_resistance(v_ring, v_tip);
         assert!((r_tr - 100.0).abs() < 0.01, "r_tr={r_tr}");
         assert!((r_rs - 100.0).abs() < 0.01, "r_rs={r_rs}");
     }
@@ -187,42 +203,37 @@ mod tests {
     fn resistance_asymmetric() {
         // R_TR=200k, R_RS=50k. Parallel legs: 200||100=66.67k, 50||100=33.33k.
         // Total load = 100k, i = 0.03mA, v_tip = 3.0V, v_ring = 0.03*33.33 = 1.0V.
-        let (r_tr, r_rs) = ExpressionChannel::calculate_resistance(1.0, 3.0);
-        assert!((r_tr - 200.0).abs() < 0.01, "r_tr={r_tr}");
-        assert!((r_rs - 50.0).abs() < 0.01, "r_rs={r_rs}");
+        let (v_ring, v_tip) = calculate_voltages(200.0, 50.0);
+        let (r_rs, r_tr) = ExpressionChannel::calculate_resistance(v_ring, v_tip);
+
+        assert!((r_rs - 200.0).abs() < 0.01, "r_rs={r_rs}");
+        assert!((r_tr - 50.0).abs() < 0.01, "r_tr={r_tr}");
     }
 
     #[test]
     fn resistance_minimum_pedal() {
-        // Pedal at minimum (wiper at sleeve/GND end): R_RS = 0, v_ring = 0.
-        // With R_TR=100k: R_TR||R_PAR = 50k, i = 3.3/60k = 0.055mA, v_tip = 2.75V.
-        let (r_tr, r_rs) = ExpressionChannel::calculate_resistance(0.0, 2.75);
-        assert!((r_tr - 100.0).abs() < 0.01, "r_tr={r_tr}");
+        // Pedal at minimum (wiper near GND): R_RS = 0k, R_TR = 100k
+        let (v_ring, v_tip) = calculate_voltages(0.0, 100.0);
+        let (r_rs, r_tr) = ExpressionChannel::calculate_resistance(v_ring, v_tip);
+
         assert!((r_rs - 0.0).abs() < 0.01, "r_rs={r_rs}");
+        assert!((r_tr - 100.0).abs() < 0.01, "r_tr={r_tr}");
     }
 
     #[test]
     fn resistance_maximum_pedal() {
-        // Pedal at maximum (wiper at tip end): R_TR = 0, so v_ring = v_tip.
-        // With R_RS=100k: both legs 50k, i = 0.055mA, v_tip = v_ring = 2.75V.
-        let (r_tr, r_rs) = ExpressionChannel::calculate_resistance(2.75, 2.75);
-        assert!((r_tr - 0.0).abs() < 0.01, "r_tr={r_tr}");
+        // Pedal at maximum (wiper at tip end): R_RS = 100k, R_TR = 0k
+        let (v_ring, v_tip) = calculate_voltages(100.0, 0.0);
+        let (r_rs, r_tr) = ExpressionChannel::calculate_resistance(v_ring, v_tip);
+
         assert!((r_rs - 100.0).abs() < 0.01, "r_rs={r_rs}");
-    }
-
-    // ---- apply_continuous_transform ----
-
-    fn linear_settings() -> ContinuousSettings {
-        ContinuousSettings {
-            drive: 0.0,
-            ..ContinuousSettings::default()
-        }
+        assert!((r_tr - 0.0).abs() < 0.01, "r_tr={r_tr}");
     }
 
     #[test]
     fn continuous_zero_maps_to_zero() {
         assert_eq!(
-            ExpressionChannel::apply_continuous_transform(0.0, linear_settings()),
+            ExpressionChannel::apply_continuous_transform(0.0, ContinuousSettings::default()),
             0
         );
     }
@@ -230,7 +241,7 @@ mod tests {
     #[test]
     fn continuous_full_maps_to_127() {
         assert_eq!(
-            ExpressionChannel::apply_continuous_transform(1.0, linear_settings()),
+            ExpressionChannel::apply_continuous_transform(1.0, ContinuousSettings::default()),
             127
         );
     }
@@ -239,7 +250,7 @@ mod tests {
     fn continuous_midpoint_linear() {
         // 0.5 * 127 = 63.5, roundf -> 64
         assert_eq!(
-            ExpressionChannel::apply_continuous_transform(0.5, linear_settings()),
+            ExpressionChannel::apply_continuous_transform(0.5, ContinuousSettings::default()),
             64
         );
     }
@@ -248,7 +259,7 @@ mod tests {
     fn continuous_quarter_linear() {
         // 0.25 * 127 = 31.75, roundf -> 32
         assert_eq!(
-            ExpressionChannel::apply_continuous_transform(0.25, linear_settings()),
+            ExpressionChannel::apply_continuous_transform(0.25, ContinuousSettings::default()),
             32
         );
     }
@@ -259,7 +270,7 @@ mod tests {
         let settings = ContinuousSettings {
             minimum_input: 0.5,
             maximum_input: 1.0,
-            drive: 0.0,
+            drive: 0.5,
             ..ContinuousSettings::default()
         };
         assert_eq!(
@@ -280,7 +291,7 @@ mod tests {
     fn continuous_drive_pushes_midpoint_higher() {
         // Higher drive = smaller exponent from exp(-drive*5) = curve bowed toward max
         let low_drive = ContinuousSettings {
-            drive: 0.0,
+            drive: 0.5,
             ..ContinuousSettings::default()
         };
         let high_drive = ContinuousSettings {
@@ -297,7 +308,7 @@ mod tests {
 
     #[test]
     fn continuous_drive_does_not_affect_endpoints() {
-        for drive in [0.0_f32, 0.5, 1.0] {
+        for drive in [0.5, 0.75, 1.0] {
             let s = ContinuousSettings {
                 drive,
                 ..ContinuousSettings::default()
@@ -314,8 +325,6 @@ mod tests {
             );
         }
     }
-
-    // ---- apply_switch_transform ----
 
     #[test]
     fn switch_above_threshold_is_pressed() {

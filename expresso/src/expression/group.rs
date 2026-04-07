@@ -65,7 +65,7 @@ mod tests {
         let mut sink = MessageCollector::new();
         let mut settings = Settings::default();
         group
-            .generate_midi([(1.65, 0.275); 4], &mut sink, &mut settings)
+            .generate_midi([(1.65, 2.3); 4], &mut sink, &mut settings)
             .unwrap();
         assert_eq!(sink.count, 4);
     }
@@ -77,7 +77,7 @@ mod tests {
         let mut sink = MessageCollector::new();
         let mut settings = Settings::default();
         group
-            .generate_midi([(1.65, 0.275); 4], &mut sink, &mut settings)
+            .generate_midi([(1.65, 2.3); 4], &mut sink, &mut settings)
             .unwrap();
         assert_eq!(sink.count, 4);
         for i in 0..4 {
@@ -99,9 +99,10 @@ mod tests {
         settings.expression.channels[2].cc = 30;
         settings.expression.channels[3].cc = 40;
         group
-            .generate_midi([(1.65, 0.275); 4], &mut sink, &mut settings)
+            .generate_midi([(1.65, 2.3); 4], &mut sink, &mut settings)
             .unwrap();
         assert_eq!(sink.count, 4);
+
         // Messages are emitted in channel order (0, 1, 2).
         assert_eq!(sink.messages[0].1, 10, "channel 0 wrong CC");
         assert_eq!(sink.messages[1].1, 20, "channel 1 wrong CC");
@@ -116,11 +117,11 @@ mod tests {
         let mut sink = MessageCollector::new();
         let mut settings = Settings::default();
         group
-            .generate_midi([(1.65, 0.275); 4], &mut sink, &mut settings)
+            .generate_midi([(1.65, 2.3); 4], &mut sink, &mut settings)
             .unwrap();
         let after_first = sink.count;
         group
-            .generate_midi([(1.65, 0.275); 4], &mut sink, &mut settings)
+            .generate_midi([(1.65, 2.3); 4], &mut sink, &mut settings)
             .unwrap();
         assert_eq!(sink.count, after_first);
     }
@@ -132,23 +133,20 @@ mod tests {
         let mut sink = MessageCollector::new();
         let mut settings = Settings::default();
         group
-            .generate_midi([(1.65, 0.275); 4], &mut sink, &mut settings)
+            .generate_midi([(1.0, 2.3); 4], &mut sink, &mut settings)
             .unwrap();
         let after_first = sink.count;
+
         // Move channel 1 to a very different position; keep other channels unchanged.
         group
             .generate_midi(
-                [
-                    (1.65, 0.275),
-                    (143.0 / 120.0, 0.275),
-                    (1.65, 0.275),
-                    (1.65, 0.275),
-                ],
+                [(1.0, 2.3), (2.0, 2.3), (1.0, 2.3), (1.0, 2.3)],
                 &mut sink,
                 &mut settings,
             )
             .unwrap();
         assert_eq!(sink.count, after_first + 1);
+
         // The new message must come from MIDI channel 1.
         assert_eq!(sink.last().0, 1, "expected message from MIDI channel 1");
     }
