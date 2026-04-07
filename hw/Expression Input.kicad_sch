@@ -1613,7 +1613,7 @@
 		)
 		(uuid "f63db122-4bb2-47c1-9c45-59dd80f2b423")
 	)
-	(hierarchical_label "VS"
+	(hierarchical_label "VT"
 		(shape input)
 		(at 184.15 91.44 0)
 		(effects
@@ -2450,7 +2450,7 @@
 				(justify left)
 			)
 		)
-		(property "Value" "VS"
+		(property "Value" "VT"
 			(at 184.15 86.8679 0)
 			(effects
 				(font

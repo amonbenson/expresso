@@ -146,10 +146,10 @@ async fn main(spawner: Spawner) {
 
     // Expression Pedals
     // Jack pin mapping:
-    //   Jack 0 — PA0 (V_ring), PA1 (V_sleeve) -> ADC1
-    //   Jack 1 — PA2 (V_ring), PA3 (V_sleeve) -> ADC1
-    //   Jack 2 — PA4 (V_ring), PA5 (V_sleeve) -> ADC2
-    //   Jack 3 — PA6 (V_ring), PA7 (V_sleeve) -> ADC2
+    //   Jack 0 — PA0 (V_ring), PA1 (V_tip) -> ADC1
+    //   Jack 1 — PA2 (V_ring), PA3 (V_tip) -> ADC1
+    //   Jack 2 — PA4 (V_ring), PA5 (V_tip) -> ADC2
+    //   Jack 3 — PA6 (V_ring), PA7 (V_tip) -> ADC2
     let adc1 = Adc::new(p.ADC1, AdcConfig::default());
     let adc2 = Adc::new(p.ADC2, AdcConfig::default());
     spawner

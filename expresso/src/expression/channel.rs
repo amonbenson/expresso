@@ -22,13 +22,9 @@ impl ExpressionChannel {
     const R_PAR: f32 = 100.0;
 
     const R_MAX: f32 = 1_000_000_000.0;
-    const R_THRESH: f32 = 10.0;
+    const SWITCH_R_THRESH: f32 = 10.0;
 
     const DRIVE_FACTOR: f32 = 5.0;
-
-    /// Minimum change in the normalised input (0..1) required before an update is processed.
-    /// Changes smaller than this are ignored, filtering out noise and tiny fluctuations.
-    const MIN_INPUT_DELTA: f32 = 0.005;
 
     pub fn from_index(index: usize) -> Self {
         Self {
@@ -41,18 +37,18 @@ impl ExpressionChannel {
         self.index
     }
 
-    pub fn calculate_resistance(v_ring: f32, v_sleeve: f32) -> (f32, f32) {
+    pub fn calculate_resistance(v_ring: f32, v_tip: f32) -> (f32, f32) {
         // calculate I
-        let i = v_sleeve / Self::R_RAIL;
+        let i = (Self::V_CC - v_tip) / Self::R_RAIL;
 
         // calculate V_tip
-        let v_tip = Self::V_CC - Self::R_RAIL * i;
-
-        // calculate R_RS
-        let r_rs = (Self::R_PAR * (v_tip - v_ring)) / (i * Self::R_PAR + v_ring - v_tip);
+        let v_sleeve = Self::V_CC - v_tip;
 
         // calculate R_TR
-        let r_tr = (Self::R_PAR * (v_ring - v_sleeve)) / (i * Self::R_PAR + v_sleeve - v_ring);
+        let r_tr = (Self::R_PAR * (v_tip - v_ring)) / (i * Self::R_PAR + v_ring - v_tip);
+
+        // calculate R_RS
+        let r_rs = (Self::R_PAR * (v_ring - v_sleeve)) / (i * Self::R_PAR + v_sleeve - v_ring);
 
         (r_tr, r_rs)
     }
@@ -63,7 +59,7 @@ impl ExpressionChannel {
             (value - settings.minimum_input) / (settings.maximum_input - settings.minimum_input);
 
         // Apply drive
-        let exponent = expf(-settings.drive * Self::DRIVE_FACTOR);
+        let exponent = expf(-(settings.drive * 2.0 - 1.0) * Self::DRIVE_FACTOR);
         let value = powf(value, exponent);
 
         // Apply output transform
@@ -111,8 +107,8 @@ where
         let settings = settings.expression.channels[self.index];
 
         // Calculate the resistance values
-        let (v_ring, v_sleeve) = inputs;
-        let (r_tip_ring, r_ring_sleeve) = Self::calculate_resistance(v_ring, v_sleeve);
+        let (v_ring, v_tip) = inputs;
+        let (r_tip_ring, r_ring_sleeve) = Self::calculate_resistance(v_ring, v_tip);
 
         // Limit the resistance range
         let r_tip_ring = r_tip_ring.clamp(0.0, Self::R_MAX);
@@ -122,15 +118,16 @@ where
         // Calculate the new input value
         let new_input = match settings.input.mode {
             InputMode::Continuous => r_ring_sleeve / r_total,
-            InputMode::Switch => (r_total >= Self::R_THRESH) as u32 as f32,
+            InputMode::Switch => {
+                if r_total >= Self::SWITCH_R_THRESH {
+                    1.0
+                } else {
+                    0.0
+                }
+            }
             InputMode::Compat => v_ring / 3.3,
         }
         .clamp(0.0, 1.0);
-
-        // Ignore changes smaller than the minimum delta to suppress noise
-        if (new_input - self.current_input).abs() < Self::MIN_INPUT_DELTA {
-            return Ok(());
-        }
 
         self.previous_input = self.current_input;
         self.current_input = new_input;
@@ -176,30 +173,38 @@ mod tests {
 
     #[test]
     fn resistance_symmetric() {
-        // R_TR = R_RS = R_PAR = 100k (symmetric pedal at midpoint)
-        // Gives v_sleeve=0.275, v_ring=1.65
-        let (r1, r2) = ExpressionChannel::calculate_resistance(1.65, 0.275);
-        assert!((r1 - 100.0).abs() < 0.01, "r1={r1}");
-        assert!((r2 - 100.0).abs() < 0.01, "r2={r2}");
+        // R_TR = R_RS = 100k. Each leg has R_PAR=100k in parallel -> 50k effective per leg.
+        // Total load = 100k, i = 3.3/110k = 0.03mA, v_tip = 3.0V, v_ring = 0.03*50 = 1.5V.
+        let (r_tr, r_rs) = ExpressionChannel::calculate_resistance(1.5, 3.0);
+        assert!((r_tr - 100.0).abs() < 0.01, "r_tr={r_tr}");
+        assert!((r_rs - 100.0).abs() < 0.01, "r_rs={r_rs}");
     }
 
     #[test]
     fn resistance_asymmetric() {
-        // R_TR_circuit=200k, R_RS_circuit=50k
-        // Derived: v_sleeve=0.275, v_ring=143/120≈1.1917
-        // Function returns (r_tr_code=50, r_rs_code=200) due to internal naming
-        let v_ring = 143.0_f32 / 120.0;
-        let (r1, r2) = ExpressionChannel::calculate_resistance(v_ring, 0.275);
-        assert!((r1 - 50.0).abs() < 0.01, "r1={r1}");
-        assert!((r2 - 200.0).abs() < 0.01, "r2={r2}");
+        // R_TR=200k, R_RS=50k. Parallel legs: 200||100=66.67k, 50||100=33.33k.
+        // Total load = 100k, i = 0.03mA, v_tip = 3.0V, v_ring = 0.03*33.33 = 1.0V.
+        let (r_tr, r_rs) = ExpressionChannel::calculate_resistance(1.0, 3.0);
+        assert!((r_tr - 200.0).abs() < 0.01, "r_tr={r_tr}");
+        assert!((r_rs - 50.0).abs() < 0.01, "r_rs={r_rs}");
     }
 
     #[test]
-    fn resistance_both_zero() {
-        // v_ring = v_sleeve = v_tip = 1.65 (all nodes at same voltage, both pedal resistors shorted)
-        let (r1, r2) = ExpressionChannel::calculate_resistance(1.65, 1.65);
-        assert!((r1 - 0.0).abs() < 0.01, "r1={r1}");
-        assert!((r2 - 0.0).abs() < 0.01, "r2={r2}");
+    fn resistance_minimum_pedal() {
+        // Pedal at minimum (wiper at sleeve/GND end): R_RS = 0, v_ring = 0.
+        // With R_TR=100k: R_TR||R_PAR = 50k, i = 3.3/60k = 0.055mA, v_tip = 2.75V.
+        let (r_tr, r_rs) = ExpressionChannel::calculate_resistance(0.0, 2.75);
+        assert!((r_tr - 100.0).abs() < 0.01, "r_tr={r_tr}");
+        assert!((r_rs - 0.0).abs() < 0.01, "r_rs={r_rs}");
+    }
+
+    #[test]
+    fn resistance_maximum_pedal() {
+        // Pedal at maximum (wiper at tip end): R_TR = 0, so v_ring = v_tip.
+        // With R_RS=100k: both legs 50k, i = 0.055mA, v_tip = v_ring = 2.75V.
+        let (r_tr, r_rs) = ExpressionChannel::calculate_resistance(2.75, 2.75);
+        assert!((r_tr - 0.0).abs() < 0.01, "r_tr={r_tr}");
+        assert!((r_rs - 100.0).abs() < 0.01, "r_rs={r_rs}");
     }
 
     // ---- apply_continuous_transform ----
@@ -355,11 +360,11 @@ mod tests {
 
     #[test]
     fn process_first_call_sends_message() {
-        // Initial output is 0; any real pedal position produces a non-zero value -> triggers send
+        // Symmetric pedal midpoint: v_ring=1.5V, v_tip=3.0V -> position=0.5, CC≠0 -> triggers send
         let mut settings = Settings::default();
         let mut sink = MessageCollector::new();
         let mut ch = ExpressionChannel::default();
-        ch.generate_midi((1.65, 0.275), &mut sink, &mut settings)
+        ch.generate_midi((1.5, 3.0), &mut sink, &mut settings)
             .unwrap();
         assert_eq!(sink.count, 1);
     }
@@ -369,10 +374,10 @@ mod tests {
         let mut settings = Settings::default();
         let mut sink = MessageCollector::new();
         let mut ch = ExpressionChannel::default();
-        ch.generate_midi((1.65, 0.275), &mut sink, &mut settings)
+        ch.generate_midi((1.5, 3.0), &mut sink, &mut settings)
             .unwrap();
         let count = sink.count;
-        ch.generate_midi((1.65, 0.275), &mut sink, &mut settings)
+        ch.generate_midi((1.5, 3.0), &mut sink, &mut settings)
             .unwrap(); // same voltages -> same output
         assert_eq!(
             sink.count, count,
@@ -385,11 +390,13 @@ mod tests {
         let mut settings = Settings::default();
         let mut sink = MessageCollector::new();
         let mut ch = ExpressionChannel::default();
-        ch.generate_midi((1.65, 0.275), &mut sink, &mut settings)
-            .unwrap(); // input ≈ 0.5
+        // Symmetric midpoint: R_TR=R_RS=100k, position=0.5
+        ch.generate_midi((1.5, 3.0), &mut sink, &mut settings)
+            .unwrap();
         let count = sink.count;
-        ch.generate_midi((143.0 / 120.0, 0.275), &mut sink, &mut settings)
-            .unwrap(); // input ≈ 0.8 -> different output
+        // Asymmetric: R_TR=200k, R_RS=50k, position=0.2 -> clearly different output
+        ch.generate_midi((1.0, 3.0), &mut sink, &mut settings)
+            .unwrap();
         assert!(
             sink.count > count,
             "Expected a new message after output change"
@@ -405,7 +412,7 @@ mod tests {
 
         let mut ch = ExpressionChannel::from_index(3);
 
-        ch.generate_midi((1.65, 0.275), &mut sink, &mut settings)
+        ch.generate_midi((1.5, 3.0), &mut sink, &mut settings)
             .unwrap();
         let (midi_ch, cc, _) = sink.messages[0];
         assert_eq!(midi_ch, 3);
@@ -414,14 +421,14 @@ mod tests {
 
     #[test]
     fn process_switch_active_on_high_resistance() {
-        // r_total ≈ 200k >> R_THRESH=10k -> active -> pressed_value=127
+        // Symmetric midpoint: r_total = 200k >> R_THRESH=10k -> active -> pressed_value=127
         let mut settings = Settings::default();
         settings.expression.channels[0].input.mode = InputMode::Switch;
         let mut sink = MessageCollector::new();
 
         let mut ch = ExpressionChannel::default();
 
-        ch.generate_midi((1.65, 0.275), &mut sink, &mut settings)
+        ch.generate_midi((1.5, 3.0), &mut sink, &mut settings)
             .unwrap();
         assert_eq!(sink.count, 1);
         assert_eq!(sink.last().2, 127);
@@ -429,16 +436,16 @@ mod tests {
 
     #[test]
     fn process_switch_inactive_on_zero_resistance() {
-        // First make it active, then short the pedal -> output goes to released_value=0
+        // First make it active, then short tip+ring to GND -> r_total=0 < threshold -> released -> 0
         let mut settings = Settings::default();
         settings.expression.channels[0].input.mode = InputMode::Switch;
         let mut sink = MessageCollector::new();
 
         let mut ch = ExpressionChannel::default();
 
-        ch.generate_midi((1.65, 0.275), &mut sink, &mut settings)
+        ch.generate_midi((1.5, 3.0), &mut sink, &mut settings)
             .unwrap(); // active -> 127
-        ch.generate_midi((1.65, 1.65), &mut sink, &mut settings)
+        ch.generate_midi((0.0, 0.0), &mut sink, &mut settings)
             .unwrap(); // r_total=0 < threshold -> released -> 0
         assert_eq!(sink.last().2, 0);
     }
@@ -451,7 +458,7 @@ mod tests {
         let mut sink = MessageCollector::new();
         let mut ch = ExpressionChannel::default();
 
-        ch.generate_midi((1.65, 0.275), &mut sink, &mut settings)
+        ch.generate_midi((1.5, 3.0), &mut sink, &mut settings)
             .unwrap();
         assert_eq!(sink.count, 1);
         assert_eq!(

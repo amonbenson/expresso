@@ -73,8 +73,8 @@ where
     <ADC::Regs as BasicAdcRegs>::SampleTime: From<SampleTime>,
 {
     let ring = raw_to_voltage(adc.blocking_read(&mut channels.0, SampleTime::CYCLES2_5.into()));
-    let sleeve = raw_to_voltage(adc.blocking_read(&mut channels.1, SampleTime::CYCLES2_5.into()));
-    (ring, sleeve)
+    let tip = raw_to_voltage(adc.blocking_read(&mut channels.1, SampleTime::CYCLES2_5.into()));
+    (ring, tip)
 }
 
 fn raw_to_voltage(raw: u16) -> f32 {
