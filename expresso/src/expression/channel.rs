@@ -22,9 +22,11 @@ impl ExpressionChannel {
     const R_PAR: f32 = 100.0;
 
     const R_MAX: f32 = 1_000_000_000.0;
-    const SWITCH_R_THRESH: f32 = 10.0;
+    const R_THRESH: f32 = 10.0;
 
     const DRIVE_FACTOR: f32 = 5.0;
+
+    const MIN_INPUT_DELTA: f32 = 0.02;
 
     pub fn from_index(index: usize) -> Self {
         Self {
@@ -118,16 +120,15 @@ where
         // Calculate the new input value
         let new_input = match settings.input.mode {
             InputMode::Continuous => r_ring_sleeve / r_total,
-            InputMode::Switch => {
-                if r_total >= Self::SWITCH_R_THRESH {
-                    1.0
-                } else {
-                    0.0
-                }
-            }
+            InputMode::Switch => (r_total >= Self::R_THRESH) as u32 as f32,
             InputMode::Compat => v_ring / 3.3,
         }
         .clamp(0.0, 1.0);
+
+        // Ignore changes smaller than the minimum delta to suppress noise
+        if (new_input - self.current_input).abs() < Self::MIN_INPUT_DELTA {
+            return Ok(());
+        }
 
         self.previous_input = self.current_input;
         self.current_input = new_input;
@@ -147,16 +148,18 @@ where
         };
 
         // Emit the new value if it changed. Use our index as the MIDI channel
-        if self.current_output != self.previous_output {
-            sink.emit(
-                MidiMessage::ControlChange {
-                    channel: (self.index as u8) % 128,
-                    control: settings.cc,
-                    value: self.current_output,
-                },
-                None,
-            );
+        if self.current_output == self.previous_output {
+            return Ok(());
         }
+
+        sink.emit(
+            MidiMessage::ControlChange {
+                channel: (self.index as u8) % 128,
+                control: settings.cc,
+                value: self.current_output,
+            },
+            None,
+        );
 
         Ok(())
     }
