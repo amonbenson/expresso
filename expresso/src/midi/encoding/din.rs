@@ -260,6 +260,14 @@ mod tests {
             sink
         }
 
+        // Covers the MidiEncoder trait impl (emit delegates to emit_bytes).
+        fn encode_via_trait(message: &MidiMessage) -> CollectSink<u8, 16> {
+            let mut encoder = DinMidiEncoder;
+            let mut sink = CollectSink::new();
+            encoder.emit(message, &mut sink).unwrap();
+            sink
+        }
+
         #[test]
         fn note_on() {
             let sink = encode(&MidiMessage::NoteOn {
@@ -333,6 +341,58 @@ mod tests {
         }
 
         #[test]
+        fn note_on_note_and_velocity_values() {
+            // Checks that the exact note and velocity bytes are emitted.
+            let sink = encode(&MidiMessage::NoteOn {
+                channel: 0,
+                note: 72,
+                velocity: 42,
+            });
+            assert_eq!(sink.get(1), 72);
+            assert_eq!(sink.get(2), 42);
+        }
+
+        #[test]
+        fn note_off_note_and_velocity_values() {
+            let sink = encode(&MidiMessage::NoteOff {
+                channel: 0,
+                note: 55,
+                velocity: 80,
+            });
+            assert_eq!(sink.get(1), 55);
+            assert_eq!(sink.get(2), 80);
+        }
+
+        // MidiEncoder trait impl: emit() must produce identical output to emit_bytes().
+        #[test]
+        fn emit_trait_matches_emit_bytes_for_note_on() {
+            let msg = MidiMessage::NoteOn {
+                channel: 2,
+                note: 64,
+                velocity: 90,
+            };
+            let via_bytes = encode(&msg);
+            let via_trait = encode_via_trait(&msg);
+            for i in 0..3 {
+                assert_eq!(via_bytes.get(i), via_trait.get(i), "byte {i} differs");
+            }
+        }
+
+        #[test]
+        fn emit_trait_matches_emit_bytes_for_control_change() {
+            let msg = MidiMessage::ControlChange {
+                channel: 1,
+                control: 11,
+                value: 64,
+            };
+            let via_bytes = encode(&msg);
+            let via_trait = encode_via_trait(&msg);
+            for i in 0..3 {
+                assert_eq!(via_bytes.get(i), via_trait.get(i), "byte {i} differs");
+            }
+        }
+
+        #[test]
         fn sysex() {
             let data = [0xF0, 0x41, 0x10, 0xF7];
             let mut encoder = DinMidiEncoder;
@@ -366,6 +426,44 @@ mod tests {
                     velocity: 100
                 }
             ));
+        }
+
+        // Covers try_complete for NoteOn: specific channel, note and velocity values.
+        #[test]
+        fn note_on_channel_note_velocity() {
+            let mut d = DinMidiDecoder::<0>::new();
+            let msg = feed_message(&mut d, &[0x97, 72, 42]).unwrap();
+            match msg {
+                MidiMessage::NoteOn {
+                    channel,
+                    note,
+                    velocity,
+                } => {
+                    assert_eq!(channel, 7);
+                    assert_eq!(note, 72);
+                    assert_eq!(velocity, 42);
+                }
+                _ => panic!("expected NoteOn"),
+            }
+        }
+
+        // Covers try_complete for NoteOff: specific channel, note and velocity values.
+        #[test]
+        fn note_off_channel_note_velocity() {
+            let mut d = DinMidiDecoder::<0>::new();
+            let msg = feed_message(&mut d, &[0x8B, 55, 80]).unwrap();
+            match msg {
+                MidiMessage::NoteOff {
+                    channel,
+                    note,
+                    velocity,
+                } => {
+                    assert_eq!(channel, 11);
+                    assert_eq!(note, 55);
+                    assert_eq!(velocity, 80);
+                }
+                _ => panic!("expected NoteOff"),
+            }
         }
 
         #[test]

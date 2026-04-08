@@ -104,3 +104,52 @@ impl StatusSettings {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn color_black_constant_is_zero() {
+        assert_eq!(Color::BLACK, Color::new(0, 0, 0));
+        assert!(Color::BLACK.is_black());
+    }
+
+    #[test]
+    fn color_default_is_black() {
+        assert_eq!(Color::default(), Color::BLACK);
+    }
+
+    // One test covers all eight patch variants by iterating over them.
+    #[test]
+    fn all_patch_variants_update_correct_field() {
+        let c = Color::new(1, 2, 3);
+        let cases: &[(StatusSettingsPatch, fn(&StatusSettings) -> Color)] = &[
+            (StatusSettingsPatch::Power(c), |s| s.power),
+            (StatusSettingsPatch::UsbConnected(c), |s| s.usb_connected),
+            (StatusSettingsPatch::MidiUsbIn(c), |s| s.midi_usb_in),
+            (StatusSettingsPatch::MidiUsbOut(c), |s| s.midi_usb_out),
+            (StatusSettingsPatch::MidiDinIn(c), |s| s.midi_din_in),
+            (StatusSettingsPatch::MidiDinOut(c), |s| s.midi_din_out),
+            (StatusSettingsPatch::MidiExp(c), |s| s.midi_exp),
+            (StatusSettingsPatch::SettingsUpdate(c), |s| {
+                s.settings_update
+            }),
+        ];
+        for (patch, get) in cases {
+            let mut s = StatusSettings::default();
+            s.apply_patch(*patch);
+            assert_eq!(get(&s), c, "patch {patch:?} did not update the right field");
+        }
+    }
+
+    #[test]
+    fn patch_only_changes_target_field() {
+        let mut s = StatusSettings::default();
+        let original = s;
+        s.apply_patch(StatusSettingsPatch::MidiDinOut(Color::new(9, 9, 9)));
+        assert_eq!(s.midi_din_out, Color::new(9, 9, 9));
+        assert_eq!(s.power, original.power);
+        assert_eq!(s.midi_usb_in, original.midi_usb_in);
+    }
+}

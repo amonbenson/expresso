@@ -37,3 +37,87 @@ where
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::midi::{MidiEndpoint, MidiMessage, MidiSink};
+    use crate::settings::Settings;
+
+    struct CaptureSink {
+        pub message: Option<MidiMessage>,
+        pub target: Option<MidiEndpoint>,
+    }
+
+    impl CaptureSink {
+        fn new() -> Self {
+            Self {
+                message: None,
+                target: None,
+            }
+        }
+    }
+
+    impl MidiSink for CaptureSink {
+        fn emit(&mut self, message: MidiMessage, target: Option<MidiEndpoint>) {
+            self.message = Some(message);
+            self.target = target;
+        }
+    }
+
+    const CC: MidiMessage = MidiMessage::ControlChange {
+        channel: 0,
+        control: 7,
+        value: 64,
+    };
+
+    #[test]
+    fn usb_source_routes_to_din() {
+        let mut router = Router::new();
+        let mut sink = CaptureSink::new();
+        let mut settings = Settings::default();
+        router
+            .handle_midi(CC, MidiEndpoint::Usb, &mut sink, &mut settings)
+            .unwrap();
+        assert_eq!(sink.target, Some(MidiEndpoint::Din));
+        assert_eq!(sink.message, Some(CC));
+    }
+
+    #[test]
+    fn din_source_routes_to_usb() {
+        let mut router = Router::new();
+        let mut sink = CaptureSink::new();
+        let mut settings = Settings::default();
+        router
+            .handle_midi(CC, MidiEndpoint::Din, &mut sink, &mut settings)
+            .unwrap();
+        assert_eq!(sink.target, Some(MidiEndpoint::Usb));
+    }
+
+    #[test]
+    fn expression_source_routes_to_usb() {
+        let mut router = Router::new();
+        let mut sink = CaptureSink::new();
+        let mut settings = Settings::default();
+        router
+            .handle_midi(CC, MidiEndpoint::Expression, &mut sink, &mut settings)
+            .unwrap();
+        assert_eq!(sink.target, Some(MidiEndpoint::Usb));
+    }
+
+    #[test]
+    fn message_is_forwarded_unchanged() {
+        let msg = MidiMessage::NoteOn {
+            channel: 3,
+            note: 60,
+            velocity: 100,
+        };
+        let mut router = Router::new();
+        let mut sink = CaptureSink::new();
+        let mut settings = Settings::default();
+        router
+            .handle_midi(msg, MidiEndpoint::Din, &mut sink, &mut settings)
+            .unwrap();
+        assert_eq!(sink.message, Some(msg));
+    }
+}

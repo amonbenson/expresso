@@ -140,4 +140,70 @@ mod tests {
         settings.set_label_str("Some very large label that is definately too long");
         assert_eq!(settings.label_str(), "Some very large label that is de",);
     }
+
+    // Covers every apply_patch branch.
+    #[test]
+    fn all_patch_variants_update_correct_field() {
+        let label: [u8; 32] = core::array::from_fn(|i| i as u8);
+
+        let mut s = ExpressionChannelSettings::default();
+
+        s.apply_patch(ExpressionChannelSettingsPatch::Label(label));
+        assert_eq!(s.label, label, "Label");
+
+        s.apply_patch(ExpressionChannelSettingsPatch::CC(42));
+        assert_eq!(s.cc, 42, "CC");
+
+        s.apply_patch(ExpressionChannelSettingsPatch::InputMode(InputMode::Switch));
+        assert_eq!(s.input.mode, InputMode::Switch, "InputMode");
+
+        s.apply_patch(ExpressionChannelSettingsPatch::ContinuousMinimumInput(0.1));
+        assert!(
+            (s.input.continuous.minimum_input - 0.1).abs() < 1e-6,
+            "ContinuousMinimumInput"
+        );
+
+        s.apply_patch(ExpressionChannelSettingsPatch::ContinuousMaximumInput(0.9));
+        assert!(
+            (s.input.continuous.maximum_input - 0.9).abs() < 1e-6,
+            "ContinuousMaximumInput"
+        );
+
+        s.apply_patch(ExpressionChannelSettingsPatch::ContinuousMinimumOutput(10));
+        assert_eq!(
+            s.input.continuous.minimum_output, 10,
+            "ContinuousMinimumOutput"
+        );
+
+        s.apply_patch(ExpressionChannelSettingsPatch::ContinuousMaximumOutput(120));
+        assert_eq!(
+            s.input.continuous.maximum_output, 120,
+            "ContinuousMaximumOutput"
+        );
+
+        s.apply_patch(ExpressionChannelSettingsPatch::ContinuousDrive(0.75));
+        assert!(
+            (s.input.continuous.drive - 0.75).abs() < 1e-6,
+            "ContinuousDrive"
+        );
+
+        s.apply_patch(ExpressionChannelSettingsPatch::SwitchInvertPolarity(true));
+        assert!(s.input.switch.invert_polarity, "SwitchInvertPolarity");
+
+        s.apply_patch(ExpressionChannelSettingsPatch::SwitchReleasedValue(5));
+        assert_eq!(s.input.switch.released_value, 5, "SwitchReleasedValue");
+
+        s.apply_patch(ExpressionChannelSettingsPatch::SwitchPressedValue(100));
+        assert_eq!(s.input.switch.pressed_value, 100, "SwitchPressedValue");
+    }
+
+    #[test]
+    fn patch_only_changes_target_field() {
+        let mut s = ExpressionChannelSettings::default();
+        let original_cc = s.cc;
+        s.apply_patch(ExpressionChannelSettingsPatch::ContinuousDrive(0.9));
+        assert!((s.input.continuous.drive - 0.9).abs() < 1e-6);
+        assert_eq!(s.cc, original_cc);
+        assert_eq!(s.input.mode, InputMode::Continuous);
+    }
 }
