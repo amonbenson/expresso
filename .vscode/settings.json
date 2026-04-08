@@ -3,7 +3,7 @@
     "rust-analyzer.linkedProjects": [
         "expresso/Cargo.toml",
         "fw/Cargo.toml",
-        "sw/Cargo.toml",
+        "sw/src-tauri/Cargo.toml",
         "xtask/Cargo.toml"
     ],
     "rust-analyzer.runnables.extraTestBinaryArgs": ["--nocapture"],
