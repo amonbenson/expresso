@@ -302,6 +302,20 @@ mod tests {
         }
 
         #[test]
+        fn note_on_note_and_velocity_values() {
+            let sink = encode(&MidiMessage::NoteOn { channel: 0, note: 72, velocity: 42 });
+            assert_eq!(sink.get(0)[2], 72);
+            assert_eq!(sink.get(0)[3], 42);
+        }
+
+        #[test]
+        fn note_off_note_and_velocity_values() {
+            let sink = encode(&MidiMessage::NoteOff { channel: 0, note: 55, velocity: 80 });
+            assert_eq!(sink.get(0)[2], 55);
+            assert_eq!(sink.get(0)[3], 80);
+        }
+
+        #[test]
         fn sysex_end_1_byte() {
             // F0 + 2 data bytes + F7 = 4 bytes; first CIN 0x04, last F7 alone (CIN 0x05)
             let data = [0xF0, 0x41, 0x10, 0xF7];
@@ -333,6 +347,34 @@ mod tests {
                     velocity: 100
                 }
             ));
+        }
+
+        // Destructures result fields directly instead of using matches!, covering
+        // the note/velocity bindings in the 0x08 and 0x09 decoder arms.
+        #[test]
+        fn note_on_channel_note_velocity() {
+            let msg = decode([0x09, 0x97, 72, 42]).unwrap();
+            match msg {
+                MidiMessage::NoteOn { channel, note, velocity } => {
+                    assert_eq!(channel, 7);
+                    assert_eq!(note, 72);
+                    assert_eq!(velocity, 42);
+                }
+                _ => panic!("expected NoteOn"),
+            }
+        }
+
+        #[test]
+        fn note_off_channel_note_velocity() {
+            let msg = decode([0x08, 0x8B, 55, 80]).unwrap();
+            match msg {
+                MidiMessage::NoteOff { channel, note, velocity } => {
+                    assert_eq!(channel, 11);
+                    assert_eq!(note, 55);
+                    assert_eq!(velocity, 80);
+                }
+                _ => panic!("expected NoteOff"),
+            }
         }
 
         #[test]
