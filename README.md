@@ -1,9 +1,10 @@
 [![CI](https://github.com/amonbenson/expresso/actions/workflows/ci.yml/badge.svg)](https://github.com/amonbenson/expresso/actions/workflows/ci.yml)
 [![Release](https://github.com/amonbenson/expresso/actions/workflows/release.yml/badge.svg)](https://github.com/amonbenson/expresso/actions/workflows/release.yml)
+[![codecov](https://codecov.io/gh/amonbenson/expresso/graph/badge.svg?token=B1U42Z52IV)](https://codecov.io/gh/amonbenson/expresso)
 
 # Expresso
 
-An open source USB &ndash; Midi &ndash; Expression pedal converter.
+An open source USB&ndash;Midi&ndash;Expression pedal converter.
 
 ⚠️ Please note: This project is currently under heavy development and not yet functional. ⚠️
 
