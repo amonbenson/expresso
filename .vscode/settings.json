@@ -1,8 +1,9 @@
 {
     "rust-analyzer.server.path": "rust-analyzer",
     "rust-analyzer.linkedProjects": [
-        "sw/Cargo.toml",
         "expresso/Cargo.toml",
+        "fw/Cargo.toml",
+        "sw/Cargo.toml",
         "xtask/Cargo.toml"
     ],
     "rust-analyzer.runnables.extraTestBinaryArgs": ["--nocapture"],

@@ -10,7 +10,8 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
-  release:
+  build-sw:
+    name: Build desktop app (${{ matrix.platform }} ${{ matrix.args }})
     permissions:
       contents: write
     strategy:
@@ -19,12 +20,16 @@ jobs:
         include:
           - platform: ubuntu-22.04
             args: ''
+            artifact-name: sw-linux
           - platform: windows-latest
             args: ''
+            artifact-name: sw-windows
           - platform: macos-latest
             args: '--target aarch64-apple-darwin'
+            artifact-name: sw-macos-aarch64
           - platform: macos-latest
             args: '--target x86_64-apple-darwin'
+            artifact-name: sw-macos-x86_64
 
     runs-on: ${{ matrix.platform }}
 
@@ -59,21 +64,34 @@ jobs:
         working-directory: sw
 
       - uses: tauri-apps/tauri-action@v0
+        id: tauri
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           projectPath: sw
-          tagName: v__VERSION__
-          releaseName: v__VERSION__
-          releaseDraft: true
-          prerelease: false
           args: ${{ matrix.args }}
+
+      - name: Stage artifacts
+        shell: bash
+        env:
+          ARTIFACT_PATHS: ${{ steps.tauri.outputs.artifactPaths }}
+        run: |
+          mkdir -p staging
+          python3 -c "
+          import json, shutil, os
+          for p in json.loads(os.environ['ARTIFACT_PATHS']):
+              shutil.copy(p, 'staging/')
+          "
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: ${{ matrix.artifact-name }}
+          path: staging/
+          if-no-files-found: error
 
   build-fw:
     name: Build firmware
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
     steps:
       - uses: actions/checkout@v6
 
@@ -88,7 +106,27 @@ jobs:
       - name: Copy ELF with extension
         run: cp target/thumbv7em-none-eabihf/release/expresso-fw target/thumbv7em-none-eabihf/release/expresso-fw.elf
 
+      - uses: actions/upload-artifact@v7
+        with:
+          name: firmware
+          path: target/thumbv7em-none-eabihf/release/expresso-fw.elf
+          if-no-files-found: error
+
+  release:
+    name: Release
+    needs: [build-sw, build-fw]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          path: staging
+          merge-multiple: true
+
       - uses: softprops/action-gh-release@v2
         with:
-          draft: true
-          files: target/thumbv7em-none-eabihf/release/expresso-fw.elf
+          files: staging/*
+          draft: false
+          prerelease: false
