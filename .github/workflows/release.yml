@@ -10,8 +10,26 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
+  # Create a draft release so all subsequent jobs can upload to the same release.
+  # Skipped on workflow_dispatch (no tag = no release).
+  create-release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      release-id: ${{ steps.release.outputs.id }}
+    steps:
+      - uses: softprops/action-gh-release@v2
+        id: release
+        with:
+          draft: true
+
   build-sw:
     name: Build desktop app (${{ matrix.platform }} ${{ matrix.args }})
+    needs: create-release
+    # Run on tags (after create-release) and also on workflow_dispatch (create-release skipped).
+    if: always() && (needs.create-release.result == 'success' || needs.create-release.result == 'skipped')
     permissions:
       contents: write
     strategy:
@@ -20,16 +38,12 @@ jobs:
         include:
           - platform: ubuntu-22.04
             args: ''
-            artifact-name: sw-linux
           - platform: windows-latest
             args: ''
-            artifact-name: sw-windows
           - platform: macos-latest
             args: '--target aarch64-apple-darwin'
-            artifact-name: sw-macos-aarch64
           - platform: macos-latest
             args: '--target x86_64-apple-darwin'
-            artifact-name: sw-macos-x86_64
 
     runs-on: ${{ matrix.platform }}
 
@@ -63,35 +77,22 @@ jobs:
         run: npm install
         working-directory: sw
 
+      # releaseId is empty on workflow_dispatch; tauri-action will build without uploading.
       - uses: tauri-apps/tauri-action@v0
-        id: tauri
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           projectPath: sw
+          releaseId: ${{ needs.create-release.outputs.release-id }}
           args: ${{ matrix.args }}
-
-      - name: Stage artifacts
-        shell: bash
-        env:
-          ARTIFACT_PATHS: ${{ steps.tauri.outputs.artifactPaths }}
-        run: |
-          mkdir -p staging
-          python3 -c "
-          import json, shutil, os
-          for p in json.loads(os.environ['ARTIFACT_PATHS']):
-              shutil.copy(p, 'staging/')
-          "
-
-      - uses: actions/upload-artifact@v7
-        with:
-          name: ${{ matrix.artifact-name }}
-          path: staging/
-          if-no-files-found: error
 
   build-fw:
     name: Build firmware
+    needs: create-release
+    if: always() && (needs.create-release.result == 'success' || needs.create-release.result == 'skipped')
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v6
 
@@ -106,27 +107,26 @@ jobs:
       - name: Copy ELF with extension
         run: cp target/thumbv7em-none-eabihf/release/expresso-fw target/thumbv7em-none-eabihf/release/expresso-fw.elf
 
-      - uses: actions/upload-artifact@v7
+      - uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/v')
         with:
-          name: firmware
-          path: target/thumbv7em-none-eabihf/release/expresso-fw.elf
-          if-no-files-found: error
+          files: target/thumbv7em-none-eabihf/release/expresso-fw.elf
 
-  release:
-    name: Release
-    needs: [build-sw, build-fw]
-    if: startsWith(github.ref, 'refs/tags/v')
+  # Publish the draft once all builds have uploaded their artifacts.
+  publish-release:
+    name: Publish release
+    needs: [create-release, build-sw, build-fw]
+    if: startsWith(github.ref, 'refs/tags/v') && !failure() && !cancelled()
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v8
+      - uses: actions/github-script@v7
         with:
-          path: staging
-          merge-multiple: true
-
-      - uses: softprops/action-gh-release@v2
-        with:
-          files: staging/*
-          draft: false
-          prerelease: false
+          script: |
+            await github.rest.repos.updateRelease({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              release_id: ${{ needs.create-release.outputs.release-id }},
+              draft: false
+            })
